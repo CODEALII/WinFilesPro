@@ -4,9 +4,11 @@
 #include <QCheckBox>
 #include <QFrame>
 #include <QApplication>
+#include <QProgressBar>
 
-SettingsDialog::SettingsDialog(QWidget *parent)
+SettingsDialog::SettingsDialog(QWidget *parent, Updater *updater)
     : QDialog(parent),
+      m_updater(updater),
       selectedLang(I18n::language()),
       selectedTheme(AppStyle::currentTheme())
 {
@@ -14,7 +16,7 @@ SettingsDialog::SettingsDialog(QWidget *parent)
 
     setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
     setAttribute(Qt::WA_TranslucentBackground);
-    setFixedSize(460, 560);
+    setFixedSize(460, 640);
 
     buildUi();
 }
@@ -115,6 +117,16 @@ void SettingsDialog::buildUi() {
     contentLayout->addWidget(sep2);
     contentLayout->addSpacing(8);
 
+    // --- Sektion: Updates ---
+    contentLayout->addWidget(makeSectionHeader(T("settings_section_updates")));
+    contentLayout->addWidget(makeUpdateSection());
+
+    QFrame *sep3 = new QFrame;
+    sep3->setFrameShape(QFrame::HLine);
+    sep3->setStyleSheet(QString("color: %1;").arg(c.border));
+    contentLayout->addWidget(sep3);
+    contentLayout->addSpacing(8);
+
     // --- Sektion: Info ---
     contentLayout->addWidget(makeSectionHeader(T("settings_section_info")));
     contentLayout->addWidget(makeAboutSection());
@@ -173,6 +185,26 @@ void SettingsDialog::buildUi() {
 
     footerLayout->addWidget(hint);
     footerLayout->addStretch();
+
+    QPushButton *cancelBtn = new QPushButton(T("settings_cancel"));
+    cancelBtn->setFixedHeight(34);
+    cancelBtn->setFixedWidth(100);
+    cancelBtn->setStyleSheet(QString(R"(
+        QPushButton {
+            background-color: transparent;
+            border: 1px solid %1;
+            border-radius: 6px;
+            color: %2;
+            font-size: 13px;
+            font-weight: 600;
+            padding: 0 16px;
+        }
+        QPushButton:hover { background-color: %3; }
+    )").arg(c.border, c.textPrimary, c.hoverBg));
+    connect(cancelBtn, &QPushButton::clicked, this, &QDialog::reject);
+
+    footerLayout->addWidget(cancelBtn);
+    footerLayout->addSpacing(8);
     footerLayout->addWidget(saveBtn);
     layout->addWidget(footer);
 }
@@ -393,4 +425,182 @@ QWidget *SettingsDialog::makeAboutSection() {
     layout->addStretch();
 
     return box;
+}
+
+QWidget *SettingsDialog::makeUpdateSection() {
+    const ThemeColors &c = AppStyle::colors();
+
+    QWidget *box = new QWidget;
+    box->setStyleSheet(QString(R"(
+        QWidget {
+            background-color: %1;
+            border: 1px solid %2;
+            border-radius: 8px;
+        }
+    )").arg(c.chromeBg, c.border));
+
+    QVBoxLayout *layout = new QVBoxLayout(box);
+    layout->setContentsMargins(16, 12, 16, 12);
+    layout->setSpacing(10);
+
+    updateStatusLabel = new QLabel(T("settings_version_now").arg(Updater::currentVersion()));
+    updateStatusLabel->setStyleSheet(QString("color: %1; font-size: 13px; background: transparent;").arg(c.textPrimary));
+
+    updateMessageLabel = new QLabel;
+    updateMessageLabel->setWordWrap(true);
+    updateMessageLabel->setStyleSheet(QString("color: %1; font-size: 12px; background: transparent;").arg(c.textSecondary));
+    updateMessageLabel->hide();
+
+    updateProgress = new QProgressBar;
+    updateProgress->setRange(0, 100);
+    updateProgress->setValue(0);
+    updateProgress->setTextVisible(false);
+    updateProgress->setFixedHeight(6);
+    updateProgress->setStyleSheet(QString(R"(
+        QProgressBar {
+            background-color: %1;
+            border: none;
+            border-radius: 3px;
+        }
+        QProgressBar::chunk {
+            background-color: %2;
+            border-radius: 3px;
+        }
+    )").arg(c.hoverBg, c.accent));
+    updateProgress->hide();
+
+    updateCheckBtn = new QPushButton(T("settings_check_updates"));
+    updateCheckBtn->setFixedHeight(30);
+    updateCheckBtn->setStyleSheet(QString(R"(
+        QPushButton {
+            background-color: transparent;
+            border: 1px solid %1;
+            border-radius: 6px;
+            color: %2;
+            font-size: 12px;
+            font-weight: 600;
+            padding: 0 12px;
+        }
+        QPushButton:hover { background-color: %3; }
+    )").arg(c.border, c.textPrimary, c.hoverBg));
+
+    updateInstallBtn = new QPushButton(T("settings_install_update"));
+    updateInstallBtn->setObjectName("primaryBtn");
+    updateInstallBtn->setFixedHeight(30);
+    updateInstallBtn->setStyleSheet(QString(R"(
+        QPushButton {
+            background-color: %1;
+            border: none;
+            border-radius: 6px;
+            color: #0b0b0b;
+            font-size: 12px;
+            font-weight: 600;
+            padding: 0 12px;
+        }
+        QPushButton:hover { background-color: %2; }
+    )").arg(c.accent, c.accentHover));
+    updateInstallBtn->hide();
+
+    if (m_updater) {
+        connect(updateCheckBtn, &QPushButton::clicked, m_updater, &Updater::checkForUpdates);
+        connect(updateInstallBtn, &QPushButton::clicked, m_updater, &Updater::installUpdate);
+        connect(m_updater, &Updater::stateChanged, this, &SettingsDialog::updateUpdateUi);
+        connect(m_updater, &Updater::message, this, [this](const QString &text) {
+            updateMessageLabel->setText(text);
+            updateMessageLabel->show();
+        });
+        connect(m_updater, &Updater::progressChanged, this, [this](int percent) {
+            if (auto *bar = qobject_cast<QProgressBar *>(updateProgress)) {
+                bar->setRange(0, 100);
+                bar->setValue(percent);
+            }
+        });
+        updateUpdateUi();
+    } else {
+        updateCheckBtn->setEnabled(false);
+    }
+
+    QWidget *row = new QWidget;
+    row->setStyleSheet("background: transparent;");
+    QHBoxLayout *rowLayout = new QHBoxLayout(row);
+    rowLayout->setContentsMargins(0, 0, 0, 0);
+    rowLayout->addWidget(updateCheckBtn);
+    rowLayout->addStretch();
+    rowLayout->addWidget(updateInstallBtn);
+
+    layout->addWidget(updateStatusLabel);
+    layout->addWidget(updateMessageLabel);
+    layout->addWidget(updateProgress);
+    layout->addWidget(row);
+
+    return box;
+}
+
+void SettingsDialog::updateUpdateUi() {
+    if (!m_updater) return;
+
+    QProgressBar *bar = qobject_cast<QProgressBar *>(updateProgress);
+    Updater::State st = m_updater->state();
+
+    switch (st) {
+    case Updater::State::Checking:
+        updateStatusLabel->setText(T("settings_checking"));
+        updateMessageLabel->hide();
+        updateCheckBtn->setEnabled(false);
+        updateInstallBtn->hide();
+        if (bar) bar->setRange(0, 0);
+        updateProgress->show();
+        break;
+    case Updater::State::UpToDate:
+        updateStatusLabel->setText(T("settings_no_updates").arg(Updater::currentVersion()));
+        updateMessageLabel->hide();
+        updateCheckBtn->setEnabled(true);
+        updateInstallBtn->hide();
+        updateProgress->hide();
+        break;
+    case Updater::State::UpdateAvailable:
+        updateStatusLabel->setText(T("settings_update_available").arg(m_updater->latestVersion()));
+        updateMessageLabel->hide();
+        updateCheckBtn->setEnabled(true);
+        updateInstallBtn->show();
+        updateProgress->hide();
+        break;
+    case Updater::State::Downloading:
+        updateStatusLabel->setText(T("settings_downloading").arg(m_updater->latestVersion()));
+        updateCheckBtn->setEnabled(false);
+        updateInstallBtn->hide();
+        if (bar) bar->setRange(0, 100);
+        updateProgress->show();
+        break;
+    case Updater::State::Building:
+        updateStatusLabel->setText(T("settings_building").arg(m_updater->latestVersion()));
+        updateCheckBtn->setEnabled(false);
+        updateInstallBtn->hide();
+        if (bar) bar->setRange(0, 0);
+        updateProgress->show();
+        break;
+    case Updater::State::Done:
+        updateStatusLabel->setText(T("settings_done"));
+        updateMessageLabel->hide();
+        updateCheckBtn->setEnabled(false);
+        updateInstallBtn->hide();
+        updateProgress->hide();
+        emit restartNeeded();
+        break;
+    case Updater::State::Failed:
+        updateStatusLabel->setText(T("settings_update_error").arg(m_updater->errorMessage()));
+        updateMessageLabel->hide();
+        updateCheckBtn->setEnabled(true);
+        updateInstallBtn->hide();
+        updateProgress->hide();
+        break;
+    case Updater::State::Idle:
+    default:
+        updateStatusLabel->setText(T("settings_version_now").arg(Updater::currentVersion()));
+        updateMessageLabel->hide();
+        updateCheckBtn->setEnabled(true);
+        updateInstallBtn->hide();
+        updateProgress->hide();
+        break;
+    }
 }

@@ -18,5 +18,5 @@ private:
     static bool s_initialized;
 };
 
-// Kurz-Makro damit man nicht immer I18n::tr() schreiben muss
-#define T(key) I18n::tr(key)
+// Kurzform um nicht immer I18n::tr() schreiben zu müssen
+inline QString T(const QString &key) { return I18n::tr(key); }

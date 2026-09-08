@@ -1,6 +1,4 @@
 #include "settingsmanager.h"
-// Das T-Makro kollidiert mit Qt's internalen Template-Code, daher wird es hier undef
-#undef T
 #include <QSettings>
 #include <QStandardPaths>
 

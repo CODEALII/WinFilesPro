@@ -7,7 +7,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Widgets Network)
 
 add_executable(WinFilesPro
     src/main.cpp
@@ -23,9 +23,12 @@ add_executable(WinFilesPro
     src/mainwindow/settingsdialog.h
     src/mainwindow/settingsmanager.cpp
     src/mainwindow/settingsmanager.h
+    src/mainwindow/updater.cpp
+    src/mainwindow/updater.h
     assets/icons/resources.qrc
 )
 
-target_link_libraries(WinFilesPro PRIVATE Qt6::Widgets)
+target_link_libraries(WinFilesPro PRIVATE Qt6::Widgets Qt6::Network)
 
 target_compile_definitions(WinFilesPro PRIVATE QT_NO_PLATFORM_THEME_INTEGRATION)
+target_compile_definitions(WinFilesPro PRIVATE WINFILESPRO_VERSION="${PROJECT_VERSION}")

@@ -32,6 +32,7 @@
 #include <QGraphicsDropShadowEffect>
 
 #include "settingsdialog.h"
+#include "updater.h"
 
 #include <QIcon>
 #include <QPixmap>
@@ -173,7 +174,7 @@ protected:
 class ModernConfirmDialog : public QDialog {
 public:
     ModernConfirmDialog(const QString &title, const QString &message, QWidget *parent = nullptr,
-                          const QString &confirmText = "Löschen", bool danger = true)
+                          const QString &confirmText = T("delete"), bool danger = true)
         : QDialog(parent) {
 
         const ThemeColors &c = AppStyle::colors();
@@ -225,7 +226,7 @@ public:
         innerLayout->addStretch();
 
         QHBoxLayout *buttonLayout = new QHBoxLayout();
-        QPushButton *cancelBtn = new QPushButton("Abbrechen");
+        QPushButton *cancelBtn = new QPushButton(T("cancel"));
         QPushButton *confirmBtn = new QPushButton(confirmText);
         confirmBtn->setObjectName(danger ? "dangerBtn" : "primaryBtn");
 
@@ -300,15 +301,15 @@ void MainWindow::setupRibbon() {
     navToolbar->setFloatable(false);
     navToolbar->setIconSize(QSize(16, 16));
 
-    backAction    = navToolbar->addAction(colorizeIcon(":/icons/arw_left.svg", iconColor), "Zurück");
-    forwardAction = navToolbar->addAction(colorizeIcon(":/icons/arw_right.svg", iconColor), "Vorwärts");
-    upAction      = navToolbar->addAction(colorizeIcon(":/icons/arw_up.svg", iconColor), "Nach oben");
-    refreshAction = navToolbar->addAction(colorizeIcon(":/icons/refresh.svg", iconColor), "Aktualisieren");
+    backAction    = navToolbar->addAction(colorizeIcon(":/icons/arw_left.svg", iconColor), T("back"));
+    forwardAction = navToolbar->addAction(colorizeIcon(":/icons/arw_right.svg", iconColor), T("forward"));
+    upAction      = navToolbar->addAction(colorizeIcon(":/icons/arw_up.svg", iconColor), T("up"));
+    refreshAction = navToolbar->addAction(colorizeIcon(":/icons/refresh.svg", iconColor), T("refresh"));
 
-    backAction->setToolTip("Zurück (Alt+Links)");
-    forwardAction->setToolTip("Vorwärts (Alt+Rechts)");
-    upAction->setToolTip("Übergeordneter Ordner (Alt+Hoch)");
-    refreshAction->setToolTip("Aktualisieren (F5)");
+    backAction->setToolTip(T("back_tt"));
+    forwardAction->setToolTip(T("forward_tt"));
+    upAction->setToolTip(T("up_tt"));
+    refreshAction->setToolTip(T("refresh_tt"));
 
     navToolbar->addSeparator();
 
@@ -320,7 +321,7 @@ void MainWindow::setupRibbon() {
     navToolbar->addWidget(breadcrumbWidget);
 
     searchBar = new QLineEdit;
-    searchBar->setPlaceholderText("Suchen");
+    searchBar->setPlaceholderText(T("search"));
     searchBar->setFixedWidth(220);
     searchBar->setClearButtonEnabled(true);
     QAction *searchIcon = new QAction(colorizeIcon(":/icons/search.svg", QColor(c.textSecondary)), "", this);
@@ -329,43 +330,43 @@ void MainWindow::setupRibbon() {
 
     navToolbar->addSeparator();
 
-    newTabAction = navToolbar->addAction(colorizeIcon(":/icons/new_file.svg", iconColor), "Neuer Tab");
-    newTabAction->setToolTip("Neuer Tab (Strg+T)");
-    closeTabAction = navToolbar->addAction(colorizeIcon(":/icons/delete.svg", iconColor), "Tab schließen");
-    closeTabAction->setToolTip("Aktuellen Tab schließen (Strg+W)");
+    newTabAction = navToolbar->addAction(colorizeIcon(":/icons/new_file.svg", iconColor), T("new_tab"));
+    newTabAction->setToolTip(T("new_tab_tt"));
+    closeTabAction = navToolbar->addAction(colorizeIcon(":/icons/delete.svg", iconColor), T("close_tab"));
+    closeTabAction->setToolTip(T("close_tab_tt"));
 
     QToolBar *cmdToolbar = addToolBar("Befehle");
     cmdToolbar->setMovable(false);
     cmdToolbar->setFloatable(false);
     cmdToolbar->setIconSize(QSize(16, 16));
 
-    newFolderAction = cmdToolbar->addAction(colorizeIcon(":/icons/new_folder.svg", iconColor), "Neuer Ordner");
-    newFileAction   = cmdToolbar->addAction(colorizeIcon(":/icons/new_file.svg", iconColor), "Neue Datei");
+    newFolderAction = cmdToolbar->addAction(colorizeIcon(":/icons/new_folder.svg", iconColor), T("new_folder"));
+    newFileAction   = cmdToolbar->addAction(colorizeIcon(":/icons/new_file.svg", iconColor), T("new_file"));
     cmdToolbar->addSeparator();
-    cutAction    = cmdToolbar->addAction(colorizeIcon(":/icons/cut.svg", iconColor), "Ausschneiden");
-    copyAction   = cmdToolbar->addAction(colorizeIcon(":/icons/copy.svg", iconColor), "Kopieren");
-    pasteAction  = cmdToolbar->addAction(colorizeIcon(":/icons/paste.svg", iconColor), "Einfügen");
-    renameAction = cmdToolbar->addAction(colorizeIcon(":/icons/rename.svg", iconColor), "Umbenennen");
-    deleteAction = cmdToolbar->addAction(colorizeIcon(":/icons/delete.svg", iconColor), "Löschen");
+    cutAction    = cmdToolbar->addAction(colorizeIcon(":/icons/cut.svg", iconColor), T("cut"));
+    copyAction   = cmdToolbar->addAction(colorizeIcon(":/icons/copy.svg", iconColor), T("copy"));
+    pasteAction  = cmdToolbar->addAction(colorizeIcon(":/icons/paste.svg", iconColor), T("paste"));
+    renameAction = cmdToolbar->addAction(colorizeIcon(":/icons/rename.svg", iconColor), T("rename"));
+    deleteAction = cmdToolbar->addAction(colorizeIcon(":/icons/delete.svg", iconColor), T("delete"));
     cmdToolbar->addSeparator();
-    sortAction = cmdToolbar->addAction(colorizeIcon(":/icons/sort.svg", iconColor), "Sortieren");
-    viewAction = cmdToolbar->addAction(colorizeIcon(":/icons/view.svg", iconColor), "Anzeigen");
-    hiddenFilesAction = cmdToolbar->addAction(colorizeIcon(":/icons/hidden.svg", iconColor), "Versteckte Dateien");
+    sortAction = cmdToolbar->addAction(colorizeIcon(":/icons/sort.svg", iconColor), T("sort"));
+    viewAction = cmdToolbar->addAction(colorizeIcon(":/icons/view.svg", iconColor), T("view"));
+    hiddenFilesAction = cmdToolbar->addAction(colorizeIcon(":/icons/hidden.svg", iconColor), T("hidden_files"));
     hiddenFilesAction->setCheckable(true);
     cmdToolbar->addSeparator();
-    terminalAction   = cmdToolbar->addAction(colorizeIcon(":/icons/terminal.svg", iconColor), "Terminal hier öffnen");
-    propertiesAction = cmdToolbar->addAction(colorizeIcon(":/icons/info.svg", iconColor), "Eigenschaften");
+    terminalAction   = cmdToolbar->addAction(colorizeIcon(":/icons/terminal.svg", iconColor), T("terminal"));
+    propertiesAction = cmdToolbar->addAction(colorizeIcon(":/icons/info.svg", iconColor), T("properties"));
 
-    newFolderAction->setToolTip("Neuer Ordner (Strg+Umschalt+N)");
-    newFileAction->setToolTip("Neue Datei");
-    cutAction->setToolTip("Ausschneiden (Strg+X)");
-    copyAction->setToolTip("Kopieren (Strg+C)");
-    pasteAction->setToolTip("Einfügen (Strg+V)");
-    renameAction->setToolTip("Umbenennen (F2)");
-    deleteAction->setToolTip("Löschen (Entf)");
-    hiddenFilesAction->setToolTip("Versteckte Dateien ein-/ausblenden (Strg+H)");
-    terminalAction->setToolTip("Terminal im aktuellen Ordner öffnen");
-    propertiesAction->setToolTip("Eigenschaften (Alt+Enter)");
+    newFolderAction->setToolTip(T("new_folder_tt"));
+    newFileAction->setToolTip(T("new_file_tt"));
+    cutAction->setToolTip(T("cut_tt"));
+    copyAction->setToolTip(T("copy_tt"));
+    pasteAction->setToolTip(T("paste_tt"));
+    renameAction->setToolTip(T("rename_tt"));
+    deleteAction->setToolTip(T("delete_tt"));
+    hiddenFilesAction->setToolTip(T("hidden_tt"));
+    terminalAction->setToolTip(T("terminal_tt"));
+    propertiesAction->setToolTip(T("properties_tt"));
 
     copyAction->setEnabled(false);
     cutAction->setEnabled(false);
@@ -612,7 +613,7 @@ void MainWindow::refreshTopTabBar() {
 }
 
 void MainWindow::setupStatusBar() {
-    statusLabel = new QLabel("Bereit");
+    statusLabel = new QLabel(T("ready"));
     statusBar()->addWidget(statusLabel, 1);
 
     statusSelectionLabel = new QLabel("");
@@ -650,17 +651,17 @@ void MainWindow::onFileSelectionChanged() {
 void MainWindow::onNewFolderClicked() {
     if (!fileView) return;
     bool ok = false;
-    QString name = QInputDialog::getText(this, "Neuer Ordner", "Name:", QLineEdit::Normal, "Neuer Ordner", &ok);
+    QString name = QInputDialog::getText(this, T("folder_dialog"), T("folder_label"), QLineEdit::Normal, T("new_folder"), &ok);
     if (!ok || name.isEmpty()) return;
 
     if (name.contains('/') || name.contains('\\') || name.contains("..")) {
-        ModernConfirmDialog dlg("Fehler", "Ungültige Zeichen im Namen (/, \\, ..).", this, "OK", false);
+        ModernConfirmDialog dlg(T("error"), T("invalid_chars"), this, T("ok"), false);
         dlg.exec();
         return;
     }
 
     if (!QDir(model->filePath(fileView->rootIndex())).mkdir(name)) {
-        ModernConfirmDialog dlg("Fehler", "Ordner konnte nicht erstellt werden.", this, "OK", false);
+        ModernConfirmDialog dlg(T("error"), T("folder_create_fail"), this, T("ok"), false);
         dlg.exec();
         return;
     }
@@ -670,11 +671,11 @@ void MainWindow::onNewFolderClicked() {
 void MainWindow::createNewFile() {
     if (!fileView) return;
     bool ok = false;
-    QString name = QInputDialog::getText(this, "Neue Datei", "Dateiname:", QLineEdit::Normal, "Neue Datei.txt", &ok);
+    QString name = QInputDialog::getText(this, T("file_dialog"), T("file_label"), QLineEdit::Normal, T("new_file") + ".txt", &ok);
     if (!ok || name.isEmpty()) return;
 
     if (name.contains('/') || name.contains('\\') || name.contains("..")) {
-        ModernConfirmDialog dlg("Fehler", "Ungültige Zeichen im Namen (/, \\, ..).", this, "OK", false);
+        ModernConfirmDialog dlg(T("error"), T("invalid_chars"), this, T("ok"), false);
         dlg.exec();
         return;
     }
@@ -682,7 +683,7 @@ void MainWindow::createNewFile() {
     QString fullPath = QDir(model->filePath(fileView->rootIndex())).filePath(name);
     QFile f(fullPath);
     if (f.exists()) {
-        ModernConfirmDialog dlg("Fehler", "Eine Datei mit diesem Namen existiert bereits.", this, "OK", false);
+        ModernConfirmDialog dlg(T("error"), T("file_exists"), this, T("ok"), false);
         dlg.exec();
         return;
     }
@@ -690,7 +691,7 @@ void MainWindow::createNewFile() {
         f.close();
         refreshCurrentView();
     } else {
-        ModernConfirmDialog dlg("Fehler", "Datei konnte nicht erstellt werden.", this, "OK", false);
+        ModernConfirmDialog dlg(T("error"), T("file_fail"), this, T("ok"), false);
         dlg.exec();
     }
 }
@@ -700,12 +701,17 @@ void MainWindow::onPropertiesClicked() {
     QModelIndex index = fileView->currentIndex();
     if (!index.isValid()) return;
     QFileInfo info(model->filePath(index));
-    QString type = info.isDir() ? "Ordner" : (info.suffix().isEmpty() ? "Datei" : info.suffix().toUpper() + "-Datei");
+    QString type = info.isDir() ? T("type_folder")
+                              : (info.suffix().isEmpty() ? T("type_file")
+                                                         : info.suffix().toUpper() + "-" + T("type_file"));
     QString sizeStr = info.isDir() ? "-" : QString("%1").arg(formatSize(info.size()));
-    ModernConfirmDialog dlg("Eigenschaften", 
-        QString("Name: %1\nPfad: %2\nTyp: %3\nGröße: %4\nGeändert: %5")
-        .arg(info.fileName()).arg(info.absoluteFilePath()).arg(type).arg(sizeStr)
-        .arg(info.lastModified().toString("dd.MM.yyyy hh:mm")), this, "OK", false);
+    ModernConfirmDialog dlg(T("properties"),
+        QString("%1 %2\n%3 %4\n%5 %6\n%7 %8\n%9 %10")
+        .arg(T("props_name"), info.fileName())
+        .arg(T("props_path"), info.absoluteFilePath())
+        .arg(T("props_type"), type)
+        .arg(T("props_size"), sizeStr)
+        .arg(T("props_modified"), info.lastModified().toString("dd.MM.yyyy hh:mm")), this, T("ok"), false);
     dlg.exec();
 
 }
@@ -755,7 +761,7 @@ void MainWindow::copyPathToClipboard() {
     QModelIndex idx = fileView->currentIndex();
     if (idx.isValid()) path = model->filePath(idx);
     QApplication::clipboard()->setText(path);
-    if (statusLabel) statusLabel->setText("Pfad kopiert: " + path);
+    if (statusLabel) statusLabel->setText(T("path_copied") + path);
 }
 
 void MainWindow::openInTerminal() {
@@ -768,7 +774,7 @@ void MainWindow::openInTerminal() {
         if (QProcess::startDetached(term, {}, path)) return;
     }
     // use ModernConfirmDialog for a more modern look
-    ModernConfirmDialog dlg("Terminal", "Kein unterstütztes Terminal gefunden.", this, "OK", false);
+    ModernConfirmDialog dlg(T("terminal"), T("no_terminal"), this, T("ok"), false);
     dlg.exec();
 }
 
@@ -824,7 +830,7 @@ void MainWindow::onCurrentTabChanged(int index) {
         hiddenFilesAction->setEnabled(true);
     } else {
         updateBreadcrumbs("computer://");
-        if (statusLabel) statusLabel->setText("Laufwerksübersicht");
+        if (statusLabel) statusLabel->setText(T("drives_overview"));
         if (statusSelectionLabel) statusSelectionLabel->setText("");
 
         copyAction->setEnabled(false);
@@ -879,7 +885,7 @@ void MainWindow::navigateTabTo(const QString &path) {
     fileView->setRootIndex(model->index(path));
     updateAddressBar();
     int total = model->rowCount(fileView->rootIndex());
-    if (statusLabel) statusLabel->setText(QString("%1 Elemente").arg(total));
+    if (statusLabel) statusLabel->setText(T("items_count").arg(total));
     if (statusSelectionLabel) statusSelectionLabel->setText("");
     int idx = tabs->indexOf(fileView);
     if (idx >= 0) {
@@ -902,11 +908,11 @@ void MainWindow::openNewTab(const QString &path) {
         mainLayout->setAlignment(Qt::AlignTop);
         mainLayout->setContentsMargins(30, 24, 30, 24);
 
-        QLabel *header = new QLabel("Geräte und Laufwerke");
+        QLabel *header = new QLabel(T("drives_title"));
         header->setStyleSheet(QString("font-size: 17px; color: %1; font-weight: 700; margin-bottom: 6px; background: transparent;").arg(c.textPrimary));
         mainLayout->addWidget(header);
 
-        QLabel *sub = new QLabel("Alle verbundenen Laufwerke im Überblick");
+        QLabel *sub = new QLabel(T("drives_sub"));
         sub->setStyleSheet(QString("font-size: 12px; color: %1; margin-bottom: 12px; background: transparent;").arg(c.textSecondary));
         mainLayout->addWidget(sub);
 
@@ -921,8 +927,10 @@ void MainWindow::openNewTab(const QString &path) {
             QString root = storage.rootPath();
             if (root != "/" && !root.startsWith("/media") && !root.startsWith("/mnt") && !root.startsWith("/run/media")) continue;
 
-            QString name = storage.displayName().isEmpty() ? ("Lokaler Datenträger (" + root + ")") : storage.displayName();
-            if (storage.isRoot()) name = "Lokaler Datenträger (System)";
+            QString name = storage.displayName().isEmpty()
+                   ? T("local_disk") + " (" + root + ")"
+                   : storage.displayName();
+            if (storage.isRoot()) name = T("local_disk") + " (System)";
 
             DriveCard *card = new DriveCard(name, root, storage.bytesFree(), storage.bytesTotal(), [this](QString p){
                 navigateTo(p);
@@ -938,7 +946,7 @@ void MainWindow::openNewTab(const QString &path) {
         scroll->setWidgetResizable(true);
         scroll->setStyleSheet(QString("QScrollArea { border: none; background-color: %1; }").arg(c.surfaceBg));
 
-        int idx = tabs->addTab(scroll, QIcon(":/icons/computer.ico"), "Dieser PC");
+        int idx = tabs->addTab(scroll, QIcon(":/icons/computer.ico"), T("this_pc"));
         tabs->setCurrentIndex(idx);
         return;
     }
@@ -1024,7 +1032,7 @@ void MainWindow::updateBreadcrumbs(const QString &path) {
     homeBtn->setIcon(colorizeIcon(":/icons/home.svg", QColor(c.textPrimary)));
     homeBtn->setFlat(true);
     homeBtn->setCursor(Qt::PointingHandCursor);
-    homeBtn->setToolTip("Start");
+    homeBtn->setToolTip(T("home"));
     connect(homeBtn, &QPushButton::clicked, this, [this] { navigateTo(QDir::homePath()); });
     breadcrumbLayout->addWidget(homeBtn);
 
@@ -1080,9 +1088,9 @@ void MainWindow::updateStatusDetails() {
         if (info.isFile()) { totalSize += info.size(); fileCount++; }
     }
     if (fileCount > 0)
-        statusSelectionLabel->setText(QString("%1 Elemente ausgewählt · %2").arg(selected.size()).arg(formatSize(totalSize)));
+        statusSelectionLabel->setText(T("selected_n_size").arg(selected.size()).arg(formatSize(totalSize)));
     else
-        statusSelectionLabel->setText(QString("%1 Elemente ausgewählt").arg(selected.size()));
+        statusSelectionLabel->setText(T("selected_n").arg(selected.size()));
 }
 
 void MainWindow::refreshCurrentView() {
@@ -1091,7 +1099,7 @@ void MainWindow::refreshCurrentView() {
     fileView->setRootIndex(QModelIndex());
     fileView->setRootIndex(model->index(path));
     int total = model->rowCount(fileView->rootIndex());
-    if (statusLabel) statusLabel->setText(QString("%1 Elemente").arg(total));
+    if (statusLabel) statusLabel->setText(T("items_count").arg(total));
     if (!trashPath.isEmpty() && trashItem) {
         bool full = QDir(trashPath).exists() && !QDir(trashPath).entryList(QDir::NoDotAndDotDot | QDir::AllEntries).isEmpty();
         trashItem->setIcon(QIcon(full ? ":/icons/trash_full.ico" : ":/icons/trash_empty.ico"));
@@ -1111,17 +1119,17 @@ void MainWindow::showContextMenu(const QPoint &pos) {
     if (index.isValid()) {
         QString path = model->filePath(index);
         bool dir = model->isDir(index);
-        QAction *open = menu.addAction(colorizeIcon(":/icons/open_folder.svg", iconColor), "Öffnen");
+        QAction *open = menu.addAction(colorizeIcon(":/icons/open_folder.svg", iconColor), T("open"));
         menu.addSeparator();
-        QAction *copy = menu.addAction(colorizeIcon(":/icons/copy.svg", iconColor), "Kopieren");
-        QAction *cut = menu.addAction(colorizeIcon(":/icons/cut.svg", iconColor), "Ausschneiden");
-        QAction *copyPath = menu.addAction(colorizeIcon(":/icons/link.svg", iconColor), "Pfad kopieren");
-        QAction *pin = menu.addAction(QIcon(":/icons/pinquickaccess.ico"), "An Schnellzugriff anheften");
+        QAction *copy = menu.addAction(colorizeIcon(":/icons/copy.svg", iconColor), T("copy"));
+        QAction *cut = menu.addAction(colorizeIcon(":/icons/cut.svg", iconColor), T("cut"));
+        QAction *copyPath = menu.addAction(colorizeIcon(":/icons/link.svg", iconColor), T("copy_path"));
+        QAction *pin = menu.addAction(QIcon(":/icons/pinquickaccess.ico"), T("pin_quick"));
         menu.addSeparator();
-        QAction *rename = menu.addAction(colorizeIcon(":/icons/rename.svg", iconColor), "Umbenennen");
-        QAction *remove = menu.addAction(colorizeIcon(":/icons/delete.svg", iconColor), "Löschen");
+        QAction *rename = menu.addAction(colorizeIcon(":/icons/rename.svg", iconColor), T("rename"));
+        QAction *remove = menu.addAction(colorizeIcon(":/icons/delete.svg", iconColor), T("delete"));
         menu.addSeparator();
-        QAction *props = menu.addAction(colorizeIcon(":/icons/info.svg", iconColor), "Eigenschaften");
+        QAction *props = menu.addAction(colorizeIcon(":/icons/info.svg", iconColor), T("properties"));
 
         connect(open, &QAction::triggered, this, [this, path, dir] { if (dir) navigateTo(path); else QDesktopServices::openUrl(QUrl::fromLocalFile(path)); });
         connect(copy, &QAction::triggered, this, [this, path] { clipboardPath = path; isCut = false; updateSelectionActions(); });
@@ -1137,21 +1145,26 @@ void MainWindow::showContextMenu(const QPoint &pos) {
         connect(remove, &QAction::triggered, this, &MainWindow::deleteSelected);
         connect(props, &QAction::triggered, this, [this, path] {
             QFileInfo i(path);
-            QString type = i.isDir() ? "Ordner" : (i.suffix().isEmpty() ? "Datei" : i.suffix().toUpper() + "-Datei");
+            QString type = i.isDir() ? T("type_folder")
+                                      : (i.suffix().isEmpty() ? T("type_file")
+                                                               : i.suffix().toUpper() + "-" + T("type_file"));
             QString sizeStr = i.isDir() ? "-" : formatSize(i.size());
-            // use ModernConfirmDialog for a more modern look
-            ModernConfirmDialog dlg("Eigenschaften", 
-                QString("Name: %1\nPfad: %2\nTyp: %3\nGröße: %4\nGeändert: %5")
-                .arg(i.fileName()).arg(i.absoluteFilePath()).arg(type).arg(sizeStr).arg(i.lastModified().toString("dd.MM.yyyy hh:mm")), this, "OK", false);
+            ModernConfirmDialog dlg(T("properties"),
+                QString("%1 %2\n%3 %4\n%5 %6\n%7 %8\n%9 %10")
+                .arg(T("props_name"), i.fileName())
+                .arg(T("props_path"), i.absoluteFilePath())
+                .arg(T("props_type"), type)
+                .arg(T("props_size"), sizeStr)
+                .arg(T("props_modified"), i.lastModified().toString("dd.MM.yyyy hh:mm")), this, T("ok"), false);
             dlg.exec();
         });
     } else {
-        QAction *paste = menu.addAction(colorizeIcon(":/icons/paste.svg", iconColor), "Einfügen");
+        QAction *paste = menu.addAction(colorizeIcon(":/icons/paste.svg", iconColor), T("paste"));
         menu.addSeparator();
-        QAction *folder = menu.addAction(colorizeIcon(":/icons/new_folder.svg", iconColor), "Neuer Ordner");
-        QAction *file = menu.addAction(colorizeIcon(":/icons/new_file.svg", iconColor), "Neue Datei");
+        QAction *folder = menu.addAction(colorizeIcon(":/icons/new_folder.svg", iconColor), T("new_folder_ctx"));
+        QAction *file = menu.addAction(colorizeIcon(":/icons/new_file.svg", iconColor), T("new_file_ctx"));
         menu.addSeparator();
-        QAction *term = menu.addAction(colorizeIcon(":/icons/terminal.svg", iconColor), "Terminal hier öffnen");
+        QAction *term = menu.addAction(colorizeIcon(":/icons/terminal.svg", iconColor), T("term_ctx"));
         paste->setEnabled(!clipboardPath.isEmpty());
         connect(paste, &QAction::triggered, this, &MainWindow::pasteHere);
         connect(folder, &QAction::triggered, this, &MainWindow::onNewFolderClicked);
@@ -1164,13 +1177,13 @@ void MainWindow::showContextMenu(const QPoint &pos) {
 void MainWindow::showSortMenu() {
     if (!fileView) return;
     QMenu menu(this);
-    QAction *byName = menu.addAction("Name");
-    QAction *bySize = menu.addAction("Größe");
-    QAction *byType = menu.addAction("Typ");
-    QAction *byDate = menu.addAction("Änderungsdatum");
+    QAction *byName = menu.addAction(T("sort_name"));
+    QAction *bySize = menu.addAction(T("sort_size"));
+    QAction *byType = menu.addAction(T("sort_type"));
+    QAction *byDate = menu.addAction(T("sort_date"));
     menu.addSeparator();
-    QAction *asc = menu.addAction("Aufsteigend");
-    QAction *desc = menu.addAction("Absteigend");
+    QAction *asc = menu.addAction(T("sort_asc"));
+    QAction *desc = menu.addAction(T("sort_desc"));
     asc->setCheckable(true);
     desc->setCheckable(true);
     QActionGroup *dirGroup = new QActionGroup(&menu);
@@ -1192,11 +1205,11 @@ void MainWindow::showSortMenu() {
 void MainWindow::showViewMenu() {
     if (!fileView) return;
     QMenu menu(this);
-    QAction *small = menu.addAction("Kleine Symbole");
-    QAction *medium = menu.addAction("Mittlere Symbole");
-    QAction *large = menu.addAction("Große Symbole");
+    QAction *small = menu.addAction(T("view_small"));
+    QAction *medium = menu.addAction(T("view_medium"));
+    QAction *large = menu.addAction(T("view_large"));
     menu.addSeparator();
-    QAction *hidden = menu.addAction("Versteckte Dateien anzeigen");
+    QAction *hidden = menu.addAction(T("settings_hidden"));
     hidden->setCheckable(true);
     hidden->setChecked(showHidden);
 
@@ -1215,17 +1228,17 @@ void MainWindow::pasteHere() {
     QString destPath = QDir(destDir).filePath(QFileInfo(clipboardPath).fileName());
 
     if (QFile::exists(destPath)) {
-        ModernConfirmDialog dlg("Datei existiert", "Eine Datei mit diesem Namen existiert bereits. Überschreiben?", this, "Überschreiben");
+        ModernConfirmDialog dlg(T("overwrite_title"), T("overwrite_prompt"), this, T("overwrite"));
         if (dlg.exec() != QDialog::Accepted) return;
         if (!QFile::remove(destPath)) {
-            ModernConfirmDialog dlg2("Fehler", "Datei konnte nicht überschrieben werden.", this, "OK", false);
+            ModernConfirmDialog dlg2(T("error"), T("overwrite_fail"), this, T("ok"), false);
             dlg2.exec();
             return;
         }
     }
 
     if (!QFile::copy(clipboardPath, destPath)) {
-        ModernConfirmDialog dlg("Fehler", "Einfügen fehlgeschlagen.", this, "OK", false);
+        ModernConfirmDialog dlg(T("error"), T("paste_fail"), this, T("ok"), false);
         dlg.exec();
         return;
     }
@@ -1233,7 +1246,7 @@ void MainWindow::pasteHere() {
     if (isCut) {
         if (QFile::exists(clipboardPath)) {
             if (!QFile::remove(clipboardPath)) {
-                ModernConfirmDialog dlg("Fehler", "Originaldatei konnte nicht gelöscht werden.", this, "OK", false);
+                ModernConfirmDialog dlg(T("error"), T("delete_orig_fail"), this, T("ok"), false);
                 dlg.exec();
             }
         }
@@ -1250,9 +1263,9 @@ void MainWindow::deleteSelected() {
     QModelIndexList selected = fileView->selectionModel()->selectedRows();
     if (selected.isEmpty()) return;
 
-    QString message = QString("Möchtest du %1 Element(e) wirklich unwiderruflich löschen?").arg(selected.size());
+    QString message = T("delete_msg").arg(selected.size());
 
-    ModernConfirmDialog dialog("Elemente löschen", message, this);
+    ModernConfirmDialog dialog(T("delete_confirm"), message, this);
 
     if (dialog.exec() != QDialog::Accepted) return;
 
@@ -1269,7 +1282,7 @@ void MainWindow::deleteSelected() {
     }
 
     if (failCount > 0) {
-        ModernConfirmDialog dlg("Fehler", QString("%1 Element(e) konnten nicht gelöscht werden.").arg(failCount), this, "OK", false);
+        ModernConfirmDialog dlg(T("error"), T("delete_fail").arg(failCount), this, T("ok"), false);
         dlg.exec();
     }
 
@@ -1282,17 +1295,17 @@ void MainWindow::renameSelected() {
     if (!index.isValid()) return;
     QFileInfo info(model->filePath(index));
     bool ok = false;
-    QString name = QInputDialog::getText(this, "Umbenennen", "Neuer Name:", QLineEdit::Normal, info.fileName(), &ok);
+    QString name = QInputDialog::getText(this, T("rename_dialog"), T("rename_label"), QLineEdit::Normal, info.fileName(), &ok);
     if (!ok || name.isEmpty() || name == info.fileName()) return;
 
     if (name.contains('/') || name.contains('\\') || name.contains("..")) {
-        ModernConfirmDialog dlg("Fehler", "Ungültige Zeichen im Namen (/, \\, ..).", this, "OK", false);
+        ModernConfirmDialog dlg(T("error"), T("invalid_chars"), this, T("ok"), false);
         dlg.exec();
         return;
     }
 
     if (!QFile::rename(info.absoluteFilePath(), info.dir().filePath(name))) {
-        ModernConfirmDialog dlg("Fehler", "Datei konnte nicht umbenannt werden.", this, "OK", false);
+        ModernConfirmDialog dlg(T("error"), T("rename_fail"), this, T("ok"), false);
         dlg.exec();
         return;
     }
@@ -1318,7 +1331,8 @@ void MainWindow::cutSelected() {
 }
 
 void MainWindow::openSettings() {
-    SettingsDialog dlg(this);
+    Updater updater;
+    SettingsDialog dlg(this, &updater);
 
     dlg.onThemeChanged = [this](AppTheme theme) {
         AppStyle::setTheme(theme);
@@ -1364,6 +1378,15 @@ void MainWindow::openSettings() {
         }
         updateAddressBar();
     };
+
+    connect(&dlg, &SettingsDialog::restartNeeded, &dlg, [this]() {
+        ModernConfirmDialog ask(T("update_restart_title"), T("update_restart_msg"), this,
+                                T("update_restart_now"), false);
+        if (ask.exec() == QDialog::Accepted) {
+            QProcess::startDetached(QCoreApplication::applicationFilePath(), {});
+            qApp->quit();
+        }
+    });
 
     dlg.exec();
 }

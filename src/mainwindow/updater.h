@@ -36,11 +36,13 @@ signals:
 
 private:
     void finishCheck(QNetworkReply *reply);
+    bool initTempDir();
+    void downloadBinary();
     void downloadRelease();
     void extractAndBuild();
     void buildStep(const QString &program, const QStringList &args);
     void onBuildFinished(int exitCode, QProcess::ExitStatus status);
-    void installBinary();
+    void installFile(const QString &sourcePath);
     void cleanupTemp();
     void fail(const QString &text);
     void setState(State state);
@@ -54,5 +56,8 @@ private:
     QString m_srcDir;
     QString m_buildDir;
     QString m_tarballPath;
+    QString m_binaryUrl;   // Binär-Asset des Releases (falls vorhanden)
+    QString m_binaryName;
+    QString m_binaryPath;
     int m_step = 0; // 0=tar entpacken, 1=cmake konfigurieren, 2=cmake bauen
 };

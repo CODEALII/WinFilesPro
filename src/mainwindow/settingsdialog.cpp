@@ -347,19 +347,19 @@ QWidget *SettingsDialog::makeGeneralSection() {
         }
     )").arg(c.textPrimary, c.border, c.surfaceBg, c.accent);
 
-    QCheckBox *boxes[] = { chkRestore, chkMouseNav, chkConfirmDelete, chkAnimations };
-    const char *keys[] = { "settings_restore", "settings_mouse_nav",
-                           "settings_confirm_delete", "settings_animations" };
-    for (int i = 0; i < 4; ++i) {
-        boxes[i] = new QCheckBox(T(keys[i]), box);
-        boxes[i]->setStyleSheet(checkSS);
-        layout->addWidget(boxes[i]);
+    struct OptCheck { QCheckBox **member; const char *key; bool value; };
+    const OptCheck opts[] = {
+        { &chkRestore,      "settings_restore",        SettingsManager::getRestoreLastPath() },
+        { &chkMouseNav,     "settings_mouse_nav",      SettingsManager::getMouseSideNav()    },
+        { &chkConfirmDelete,"settings_confirm_delete", SettingsManager::getConfirmDelete()    },
+        { &chkAnimations,   "settings_animations",     SettingsManager::getAnimations()       },
+    };
+    for (const OptCheck &o : opts) {
+        *o.member = new QCheckBox(T(o.key), box);
+        (*o.member)->setStyleSheet(checkSS);
+        (*o.member)->setChecked(o.value);
+        layout->addWidget(*o.member);
     }
-
-    chkRestore->setChecked(SettingsManager::getRestoreLastPath());
-    chkMouseNav->setChecked(SettingsManager::getMouseSideNav());
-    chkConfirmDelete->setChecked(SettingsManager::getConfirmDelete());
-    chkAnimations->setChecked(SettingsManager::getAnimations());
 
     return box;
 }

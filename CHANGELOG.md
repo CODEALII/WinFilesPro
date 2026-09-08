@@ -5,6 +5,12 @@
 ### Fixes
 - **Elevated (root) relaunch fixed for real**: the OS password dialog (pkexec) now passes the full display environment (DISPLAY/WAYLAND_DISPLAY/XDG_RUNTIME_DIR/DBUS_SESSION_BUS_ADDRESS/PATH) to the restarted instance, and the old window closes automatically only once the elevated instance has confirmed it is running. Cancel or failed auth keeps the old window open, so the permission-error loop is gone
 - Fixed a startup crash caused by an uninitialized sidebar pointer
+- Fixed a crash when opening the Settings dialog (null check-box pointers in the new General section)
+
+### Updater + Releases
+- The updater now installs a prebuilt Linux binary straight from the release downloads instead of rebuilding from source (source-build remains as fallback)
+- New `tools/package.sh` builds a portable, single-file executable (`WinFilesPro-<version>-x86_64.AppImage`) plus the raw binary used by the in-app updater
+- The GitHub release is meant to carry the AppImage as its download asset referenced by the updater
 
 ### Features
 - New General settings section: restore last folder on start, mouse side-button navigation, delete confirmation and animations can be toggled

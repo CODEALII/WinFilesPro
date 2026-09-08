@@ -3,6 +3,7 @@
 #include <QNetworkRequest>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QJsonArray>
 #include <QVersionNumber>
 #include <QFile>
 #include <QFileInfo>
@@ -23,6 +24,15 @@ QString Updater::currentVersion() {
     return QStringLiteral(WINFILESPRO_VERSION);
 #else
     return QStringLiteral("0.4.2");
+#endif
+}
+
+// Name des binären Release-Assets für diese Plattform
+static QString binaryAssetName() {
+#ifdef Q_OS_WIN32
+    return QStringLiteral("WinFilesPro.exe");
+#else
+    return QStringLiteral("WinFilesPro");
 #endif
 }
 
@@ -103,25 +113,96 @@ void Updater::finishCheck(QNetworkReply *reply) {
     QVersionNumber current = QVersionNumber::fromString(currentVersion());
     if (current.isNull()) current = QVersionNumber(0, 0, 0);
 
+    // Binär-Asset für diese Plattform suchen (falls der Release eine echte
+    // ausführbare Datei mitliefert, wird sie installiert statt neu gebaut)
+    m_binaryUrl.clear();
+    m_binaryName.clear();
+    const QString want = binaryAssetName();
+    const QJsonArray assets = obj.value("assets").toArray();
+    for (const QJsonValue &v : assets) {
+        const QJsonObject a = v.toObject();
+        const QString name = a.value("name").toString();
+        if (name.compare(want, Qt::CaseInsensitive) == 0) {
+            m_binaryUrl = a.value("browser_download_url").toString();
+            m_binaryName = name;
+            break;
+        }
+    }
+
     setState(latest > current ? State::UpdateAvailable : State::UpToDate);
 }
 
 void Updater::installUpdate() {
     if (m_state != State::UpdateAvailable) return;
-    downloadRelease();
+    if (!m_binaryUrl.isEmpty()) {
+        downloadBinary();
+    } else {
+        downloadRelease();
+    }
+}
+
+bool Updater::initTempDir() {
+    if (!m_tmpDir.isEmpty()) return true;
+    QTemporaryDir tmp;
+    if (!tmp.isValid()) return false;
+    m_tmpDir = tmp.path();
+    tmp.setAutoRemove(false);
+    return true;
+}
+
+// Neues Binary vom Release herunterladen und direkt installieren
+// (kein Toolchain-Build nötig)
+void Updater::downloadBinary() {
+    setState(State::Downloading);
+    emit progressChanged(0);
+
+    if (!initTempDir()) {
+        fail(QStringLiteral("Temporäres Verzeichnis konnte nicht erstellt werden."));
+        return;
+    }
+    m_binaryPath = m_tmpDir + "/" + m_binaryName;
+
+    QNetworkRequest request{ QUrl(m_binaryUrl) };
+    request.setRawHeader("User-Agent", "WinFilesPro-Updater");
+    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
+                         QNetworkRequest::NoLessSafeRedirectPolicy);
+
+    QNetworkReply *reply = m_nam->get(request);
+    connect(reply, &QNetworkReply::downloadProgress, this, [this](qint64 received, qint64 total) {
+        int pct = total > 0 ? int(received * 100 / total) : 0;
+        emit progressChanged(pct);
+    });
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        reply->deleteLater();
+        if (m_state != State::Downloading) return;
+
+        if (reply->error() != QNetworkReply::NoError) {
+            fail(reply->errorString());
+            return;
+        }
+
+        QFile file(m_binaryPath);
+        if (!file.open(QIODevice::WriteOnly)) {
+            fail(QStringLiteral("Download konnte nicht gespeichert werden."));
+            return;
+        }
+        file.write(reply->readAll());
+        file.close();
+        QFile::setPermissions(m_binaryPath, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+        emit progressChanged(100);
+
+        installFile(m_binaryPath);
+    });
 }
 
 void Updater::downloadRelease() {
     setState(State::Downloading);
     emit progressChanged(0);
 
-    QTemporaryDir tmp;
-    if (!tmp.isValid()) {
+    if (!initTempDir()) {
         fail(QStringLiteral("Temporäres Verzeichnis konnte nicht erstellt werden."));
         return;
     }
-    m_tmpDir = tmp.path();
-    tmp.setAutoRemove(false);
 
     m_tarballPath = m_tmpDir + "/WinFilesPro-" + m_latest + ".tar.gz";
 
@@ -223,15 +304,15 @@ void Updater::onBuildFinished(int exitCode, QProcess::ExitStatus status) {
         emit message(QStringLiteral("Baue WinFilesPro…"));
         buildStep("cmake", { "--build", m_buildDir, "-j" });
     } else if (m_step == 2) {
-        installBinary();
+        installFile(m_buildDir + "/WinFilesPro");
     } else {
         fail(QStringLiteral("Ungültiger Build-Schritt."));
     }
 }
 
-void Updater::installBinary() {
-    QString executable = m_buildDir + "/WinFilesPro";
-    if (!QFileInfo::exists(executable)) {
+// Ersetzt die aktuell laufende Binärdatei durch die neue Version.
+void Updater::installFile(const QString &sourcePath) {
+    if (!QFileInfo::exists(sourcePath)) {
         fail(QStringLiteral("Binärdatei wurde nicht erzeugt."));
         return;
     }
@@ -245,11 +326,14 @@ void Updater::installBinary() {
         return;
     }
 
-    if (!QFile::copy(executable, target)) {
+    if (!QFile::copy(sourcePath, target)) {
         fail(QStringLiteral("Neue Binärdatei konnte nicht installiert werden."));
+        QFile::rename(backup, target); // alten Stand wiederherstellen
         return;
     }
-    QFile::setPermissions(target, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+    QFile::setPermissions(target, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner |
+                                      QFile::ReadGroup | QFile::ExeGroup |
+                                      QFile::ReadOther | QFile::ExeOther);
     cleanupTemp();
     setState(State::Done);
 }

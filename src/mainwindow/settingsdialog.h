@@ -7,6 +7,8 @@
 #include <QHBoxLayout>
 #include <QWidget>
 #include <QButtonGroup>
+#include <QCheckBox>
+#include <QScrollArea>
 #include <functional>
 #include "style.h"
 #include "i18n.h"
@@ -30,7 +32,13 @@ private:
     QWidget *makeLangSelector();
     QWidget *makeAboutSection();
     QWidget *makeUpdateSection();
+    QWidget *makeGeneralSection();
     void updateUpdateUi();
+
+    QCheckBox *chkRestore = nullptr;
+    QCheckBox *chkMouseNav = nullptr;
+    QCheckBox *chkConfirmDelete = nullptr;
+    QCheckBox *chkAnimations = nullptr;
 
     // Pill-style toggle button pair
     QPushButton *langDe = nullptr;

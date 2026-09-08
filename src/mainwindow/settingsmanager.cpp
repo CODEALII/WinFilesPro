@@ -149,3 +149,47 @@ void SettingsManager::setSortOrder(Qt::SortOrder order) {
     settings.setValue("sort/order", order == Qt::DescendingOrder ? 1 : 0);
     settings.sync();
 }
+
+bool SettingsManager::getRestoreLastPath() {
+    QSettings settings("WinFilesPro", "WinFilesPro");
+    return settings.value("opt/restoreLastPath", true).toBool();
+}
+
+void SettingsManager::setRestoreLastPath(bool v) {
+    QSettings settings("WinFilesPro", "WinFilesPro");
+    settings.setValue("opt/restoreLastPath", v);
+    settings.sync();
+}
+
+bool SettingsManager::getMouseSideNav() {
+    QSettings settings("WinFilesPro", "WinFilesPro");
+    return settings.value("opt/mouseSideNav", true).toBool();
+}
+
+void SettingsManager::setMouseSideNav(bool v) {
+    QSettings settings("WinFilesPro", "WinFilesPro");
+    settings.setValue("opt/mouseSideNav", v);
+    settings.sync();
+}
+
+bool SettingsManager::getConfirmDelete() {
+    QSettings settings("WinFilesPro", "WinFilesPro");
+    return settings.value("opt/confirmDelete", true).toBool();
+}
+
+void SettingsManager::setConfirmDelete(bool v) {
+    QSettings settings("WinFilesPro", "WinFilesPro");
+    settings.setValue("opt/confirmDelete", v);
+    settings.sync();
+}
+
+bool SettingsManager::getAnimations() {
+    QSettings settings("WinFilesPro", "WinFilesPro");
+    return settings.value("opt/animations", true).toBool();
+}
+
+void SettingsManager::setAnimations(bool v) {
+    QSettings settings("WinFilesPro", "WinFilesPro");
+    settings.setValue("opt/animations", v);
+    settings.sync();
+}

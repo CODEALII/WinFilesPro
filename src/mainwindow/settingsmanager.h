@@ -45,6 +45,16 @@ public:
     static Qt::SortOrder getSortOrder();
     static void setSortOrder(Qt::SortOrder order);
 
+    // Allgemeine Optionen
+    static bool getRestoreLastPath();
+    static void setRestoreLastPath(bool v);
+    static bool getMouseSideNav();
+    static void setMouseSideNav(bool v);
+    static bool getConfirmDelete();
+    static void setConfirmDelete(bool v);
+    static bool getAnimations();
+    static void setAnimations(bool v);
+
 private:
     static Language s_language;
     static AppTheme s_theme;

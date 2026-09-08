@@ -91,6 +91,15 @@ void I18n::init() {
     s_de["error_reason"]     = "\nGrund: %1";
     s_de["trash_unavailable"] = "Der Papierkorb ist auf diesem System nicht verfügbar.";
     s_de["home"]           = "Start";
+    s_de["free"]           = "frei";
+    s_de["duplicate_tab"]  = "Tab duplizieren";
+    s_de["open_new_tab"]   = "In neuem Tab öffnen";
+    s_de["compress"]       = "Als ZIP komprimieren";
+    s_de["extract_here"]   = "Hier entpacken";
+    s_de["zip_missing"]    = "Keine ZIP-Werkzeuge gefunden (zip/unzip).";
+    s_de["zip_done"]       = "Archiv erstellt: %1";
+    s_de["zip_failed"]     = "Archiv konnte nicht erstellt werden.";
+    s_de["unzip_done"]     = "Entpackt nach: %1";
 
     // Toolbar
     s_de["back_tt"]         = "Zurück (Alt+Links)";
@@ -147,7 +156,7 @@ void I18n::init() {
     s_de["settings_lang_de"]  = "Deutsch";
     s_de["settings_lang_en"]  = "English";
     s_de["settings_about"]    = "Über WinFilesPro";
-    s_de["settings_version"]  = "Version 0.4.1 · Qt6 · Open Source";
+    s_de["settings_version"]  = "Version 0.4.2 · Qt6 · Open Source";
     s_de["settings_restart"]  = "Neustart erforderlich für Sprachänderung";
     s_de["settings_save"]     = "Speichern";
     s_de["settings_hidden"]   = "Versteckte Dateien anzeigen";
@@ -167,6 +176,11 @@ void I18n::init() {
     s_de["settings_update_error"]       = "Update fehlgeschlagen: %1";
     s_de["settings_no_release"]         = "Keine Releases auf GitHub gefunden.";
     s_de["settings_check_fail"]         = "Update-Check fehlgeschlagen: %1";
+    s_de["settings_section_general"]    = "Allgemein";
+    s_de["settings_restore"]            = "Letzten Ordner beim Start wiederherstellen";
+    s_de["settings_mouse_nav"]          = "Maus-Seitentasten für Zurück/Vorwärts";
+    s_de["settings_confirm_delete"]     = "Vor dem Verschieben in den Papierkorb nachfragen";
+    s_de["settings_animations"]         = "Animationen und sanfte Übergänge";
     s_de["update_restart_title"]        = "Update abgeschlossen";
     s_de["update_restart_msg"]          = "WinFilesPro wurde aktualisiert. Jetzt neu starten?";
     s_de["update_restart_now"]          = "Jetzt neu starten";
@@ -242,6 +256,15 @@ void I18n::init() {
     s_en["error_reason"]     = "\nReason: %1";
     s_en["trash_unavailable"] = "Trash is not available on this system.";
     s_en["home"]          = "Home";
+    s_en["free"]          = "free";
+    s_en["duplicate_tab"] = "Duplicate tab";
+    s_en["open_new_tab"]  = "Open in new tab";
+    s_en["compress"]      = "Compress to ZIP";
+    s_en["extract_here"]  = "Extract here";
+    s_en["zip_missing"]   = "ZIP tools not found (zip/unzip).";
+    s_en["zip_done"]      = "Archive created: %1";
+    s_en["zip_failed"]    = "Could not create archive.";
+    s_en["unzip_done"]    = "Extracted to: %1";
 
     // Toolbar
     s_en["back_tt"]         = "Back (Alt+Left)";
@@ -298,7 +321,7 @@ void I18n::init() {
     s_en["settings_lang_de"]  = "Deutsch";
     s_en["settings_lang_en"]  = "English";
     s_en["settings_about"]    = "About WinFilesPro";
-    s_en["settings_version"]  = "Version 0.4.1 · Qt6 · Open Source";
+    s_en["settings_version"]  = "Version 0.4.2 · Qt6 · Open Source";
     s_en["settings_restart"]  = "Restart required for language change";
     s_en["settings_save"]     = "Save";
     s_en["settings_hidden"]   = "Show hidden files";
@@ -318,6 +341,11 @@ void I18n::init() {
     s_en["settings_update_error"]       = "Update failed: %1";
     s_en["settings_no_release"]         = "No releases found on GitHub.";
     s_en["settings_check_fail"]         = "Update check failed: %1";
+    s_en["settings_section_general"]    = "General";
+    s_en["settings_restore"]            = "Restore last folder on start";
+    s_en["settings_mouse_nav"]          = "Mouse side buttons for Back/Forward";
+    s_en["settings_confirm_delete"]     = "Ask before moving to Trash";
+    s_en["settings_animations"]         = "Animations and smooth transitions";
     s_en["update_restart_title"]        = "Update finished";
     s_en["update_restart_msg"]          = "WinFilesPro has been updated. Restart now?";
     s_en["update_restart_now"]          = "Restart now";

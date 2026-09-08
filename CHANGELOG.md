@@ -1,5 +1,21 @@
 # WinFilesPro Changelog
 
+## [0.4.2] - 2026-09-08
+
+### Fixes
+- **Elevated (root) relaunch fixed for real**: the OS password dialog (pkexec) now passes the full display environment (DISPLAY/WAYLAND_DISPLAY/XDG_RUNTIME_DIR/DBUS_SESSION_BUS_ADDRESS/PATH) to the restarted instance, and the old window closes automatically only once the elevated instance has confirmed it is running. Cancel or failed auth keeps the old window open, so the permission-error loop is gone
+- Fixed a startup crash caused by an uninitialized sidebar pointer
+
+### Features
+- New General settings section: restore last folder on start, mouse side-button navigation, delete confirmation and animations can be toggled
+- Duplicate the current tab (context menu on tabs or Ctrl+Shift+D)
+- Open a folder in a new tab from its context menu
+- Create ZIP archives and extract ZIP files via context menu (Linux)
+- Folder status bar now shows the free space of the current drive
+
+### Smoother UI
+- Fade-in on start, animated admin toast, fade transition between tabs
+
 ## [0.4.1] - 2026-09-08
 
 ### Fixes
@@ -111,6 +127,6 @@
 
 ---
 
-**Current Version**: 0.4.1 (Stable Release)  
+**Current Version**: 0.4.2 (Stable Release)  
 **Release Date**: 2026-09-08  
 **Maintenance**: Active

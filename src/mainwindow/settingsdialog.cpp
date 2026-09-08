@@ -89,6 +89,17 @@ void SettingsDialog::buildUi() {
     contentLayout->setContentsMargins(20, 16, 20, 16);
     contentLayout->setSpacing(8);
 
+    // --- Sektion: Allgemein ---
+    contentLayout->addWidget(makeSectionHeader(T("settings_section_general")));
+    contentLayout->addWidget(makeGeneralSection());
+    contentLayout->addSpacing(8);
+
+    QFrame *sepG = new QFrame;
+    sepG->setFrameShape(QFrame::HLine);
+    sepG->setStyleSheet(QString("color: %1;").arg(c.border));
+    contentLayout->addWidget(sepG);
+    contentLayout->addSpacing(8);
+
     // --- Sektion: Sprache ---
     contentLayout->addWidget(makeSectionHeader(T("settings_section_language")));
     contentLayout->addWidget(makeLangSelector());
@@ -116,7 +127,15 @@ void SettingsDialog::buildUi() {
     contentLayout->addWidget(makeAboutSection());
 
     contentLayout->addStretch();
-    layout->addWidget(content);
+
+    QScrollArea *scroll = new QScrollArea;
+    scroll->setWidget(content);
+    scroll->setWidgetResizable(true);
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scroll->setStyleSheet(QString("QScrollArea { background: transparent; border: none; }"
+                                  "QScrollArea > QWidget > QWidget { background: transparent; }"));
+    layout->addWidget(scroll);
 
     // ---- Footer mit Hinweis + Speichern ----
     QWidget *footer = new QWidget;
@@ -156,6 +175,11 @@ void SettingsDialog::buildUi() {
             SettingsManager::setLanguage(selectedLang);
             if (onLanguageChanged) onLanguageChanged(selectedLang);
         }
+        // Allgemeine Optionen
+        SettingsManager::setRestoreLastPath(chkRestore->isChecked());
+        SettingsManager::setMouseSideNav(chkMouseNav->isChecked());
+        SettingsManager::setConfirmDelete(chkConfirmDelete->isChecked());
+        SettingsManager::setAnimations(chkAnimations->isChecked());
         // Einstellungen speichern
         SettingsManager::save();
         accept();
@@ -282,6 +306,62 @@ QWidget *SettingsDialog::makeLangSelector() {
     layout->addWidget(pill);
     layout->addStretch();
     return row;
+}
+
+QWidget *SettingsDialog::makeGeneralSection() {
+    const ThemeColors &c = AppStyle::colors();
+
+    QWidget *box = new QWidget;
+    box->setStyleSheet(QString(R"(
+        QWidget {
+            background-color: %1;
+            border: 1px solid %2;
+            border-radius: 8px;
+        }
+    )").arg(c.chromeBg, c.border));
+
+    QVBoxLayout *layout = new QVBoxLayout(box);
+    layout->setContentsMargins(16, 12, 16, 12);
+    layout->setSpacing(10);
+
+    const QString checkSS = QString(R"(
+        QCheckBox {
+            color: %1;
+            font-size: 13px;
+            spacing: 10px;
+            background: transparent;
+            border: none;
+        }
+        QCheckBox::indicator {
+            width: 18px;
+            height: 18px;
+            border: 1px solid %2;
+            border-radius: 4px;
+            background-color: %3;
+        }
+        QCheckBox::indicator:hover { border-color: %4; }
+        QCheckBox::indicator:checked {
+            background-color: %4;
+            border-color: %4;
+            image: none;
+        }
+    )").arg(c.textPrimary, c.border, c.surfaceBg, c.accent);
+
+    QCheckBox *boxes[] = { chkRestore, chkMouseNav, chkConfirmDelete, chkAnimations };
+    const char *keys[] = { "settings_restore", "settings_mouse_nav",
+                           "settings_confirm_delete", "settings_animations" };
+    for (int i = 0; i < 4; ++i) {
+        boxes[i] = new QCheckBox(T(keys[i]), box);
+        boxes[i]->setStyleSheet(checkSS);
+        layout->addWidget(boxes[i]);
+    }
+
+    chkRestore->setChecked(SettingsManager::getRestoreLastPath());
+    chkMouseNav->setChecked(SettingsManager::getMouseSideNav());
+    chkConfirmDelete->setChecked(SettingsManager::getConfirmDelete());
+    chkAnimations->setChecked(SettingsManager::getAnimations());
+
+    return box;
 }
 
 QWidget *SettingsDialog::makeAboutSection() {

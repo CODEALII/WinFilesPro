@@ -25,6 +25,11 @@
 #include <QMouseEvent>
 #include <QClipboard>
 #include <QProcess>
+#include <QProcessEnvironment>
+#include <QUuid>
+#include <QPropertyAnimation>
+#include <QEasingCurve>
+#include <QGraphicsOpacityEffect>
 
 #include <QDialog>
 #include <QLabel>
@@ -108,10 +113,59 @@ static QString curDirErrorReason() {
     return QString::fromLocal8Bit(std::strerror(errno));
 }
 
-// App mit polkit (OS-Passwortdialog) als root neu starten
-static void launchElevated(const QString &path) {
+// App mit polkit (OS-Passwortdialog) als root neu starten. Die aktuelle
+// (nicht-elevierte) Instanz bleibt solange bestehen, bis die neue Instanz
+// bestätigt, dass sie erfolgreich als root gestartet ist (Marker-Datei).
+void MainWindow::launchElevated(const QString &path) {
+    if (elevateProcess) return; // Läuft bereits eine Elevation
+#ifndef Q_OS_WIN32
     const QString app = QCoreApplication::applicationFilePath();
-    QProcess::startDetached(QStringLiteral("pkexec"), {app, path});
+    const QString token = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    elevateMarker = QDir::tempPath() + QStringLiteral("/WinFilesPro-elevate-") + token + QStringLiteral(".marker");
+
+    elevateProcess = new QProcess(this);
+    elevateProcess->setProcessEnvironment(QProcessEnvironment::systemEnvironment());
+
+    // pkexec leert die Umgebung weitgehend -> Display- und Session-Variablen
+    // explizit an "env" durchreichen, damit die gestartete Instanz sichtbar ist.
+    QStringList args{ QStringLiteral("env") };
+    const char *envKeys[] = { "DISPLAY", "WAYLAND_DISPLAY", "XAUTHORITY", "XDG_RUNTIME_DIR",
+                              "XDG_SESSION_TYPE", "DBUS_SESSION_BUS_ADDRESS",
+                              "GDK_BACKEND", "QT_QPA_PLATFORM", "LANG", "LC_ALL", "HOME", "PATH" };
+    for (const char *key : envKeys) {
+        const QByteArray val = qgetenv(key);
+        if (!val.isEmpty()) args << (QString(key) + '=' + QString::fromLocal8Bit(val));
+    }
+    args << app << QStringLiteral("--elevated") << path
+         << QStringLiteral("--elevated-marker") << elevateMarker;
+
+    elevateProcess->start(QStringLiteral("pkexec"), args);
+
+    connect(elevateProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+            this, [this](int, QProcess::ExitStatus) {
+        stopElevationWait(); // Abgebrochen oder gescheitert: alte Instanz bleibt offen
+    });
+
+    elevatePoll = new QTimer(this);
+    elevatePoll->setInterval(250);
+    connect(elevatePoll, &QTimer::timeout, this, [this] {
+        if (QFile::exists(elevateMarker)) {
+            stopElevationWait();
+            close();
+        }
+    });
+    elevatePoll->start();
+    QTimer::singleShot(90000, this, [this] { if (elevatePoll) stopElevationWait(); });
+#endif
+}
+
+void MainWindow::stopElevationWait() {
+    if (elevatePoll) { elevatePoll->stop(); elevatePoll->deleteLater(); elevatePoll = nullptr; }
+    if (elevateProcess) { elevateProcess->deleteLater(); elevateProcess = nullptr; }
+    if (!elevateMarker.isEmpty()) {
+        QFile::remove(elevateMarker);
+        elevateMarker.clear();
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -135,6 +189,15 @@ static QString formatSize(qint64 bytes) {
     if (bytes >= mb) return QString::number(bytes / mb, 'f', 2) + " MB";
     if (bytes >= kb) return QString::number(bytes / kb, 'f', 1) + " KB";
     return QString::number(bytes) + " Bytes";
+}
+
+static QString itemsWithFreeSpace(int total, const QString &path) {
+    QString text = T("items_count").arg(total);
+    const QStorageInfo st(path);
+    if (st.isValid() && st.isReady() && st.bytesTotal() > 0) {
+        text += " · " + formatSize(st.bytesFree()) + " " + T("free");
+    }
+    return text;
 }
 
 // ---------------------------------------------------------------------------
@@ -353,12 +416,54 @@ MainWindow::MainWindow(QWidget *parent)
     // Maus-Seitentasten (Vor/Zurück) app-weit abfangen
     qApp->installEventFilter(this);
 
+#ifndef Q_OS_WIN32
+    // Relaunch als root: Zielpfad auslesen, Marker schreiben, damit die
+    // alte (nicht-elevierte) Instanz sich sauber schließt.
+    const QStringList args = QCoreApplication::arguments();
+    const int elevIdx = args.indexOf(QStringLiteral("--elevated"));
+    if (elevIdx >= 0 && elevIdx + 1 < args.size()) {
+        const QString elevPath = args.at(elevIdx + 1);
+        if (::getuid() == 0 && !elevPath.isEmpty()) {
+            const int markerIdx = args.indexOf(QStringLiteral("--elevated-marker"));
+            const QString marker = (markerIdx >= 0 && markerIdx + 1 < args.size())
+                                       ? args.at(markerIdx + 1) : QString();
+            if (!marker.isEmpty()) {
+                QFile f(marker);
+                if (f.open(QIODevice::WriteOnly)) f.close();
+                QTimer::singleShot(10000, this, [marker] { QFile::remove(marker); });
+            }
+            elevatedStartPath = elevPath;
+        }
+    }
+#endif
+
     applyTheme();
 
     setupRibbon();
     setupStatusBar();
     setupLayout();
-    navigateTo(QDir::homePath());
+
+    QString target = elevatedStartPath;
+    if (target.isEmpty() && SettingsManager::getRestoreLastPath()) {
+        const QString last = SettingsManager::getLastPath();
+        if (QDir(last).exists()) target = last;
+    }
+    navigateTo(target.isEmpty() ? QDir::homePath() : target);
+}
+
+void MainWindow::showEvent(QShowEvent *event) {
+    QMainWindow::showEvent(event);
+    if (!windowShownOnce && SettingsManager::getAnimations()) {
+        windowShownOnce = true;
+        setWindowOpacity(0.0);
+        QPropertyAnimation *fade = new QPropertyAnimation(this, "windowOpacity", this);
+        fade->setDuration(180);
+        fade->setStartValue(0.0);
+        fade->setEndValue(1.0);
+        fade->start(QAbstractAnimation::DeleteWhenStopped);
+    } else {
+        windowShownOnce = true;
+    }
 }
 
 void MainWindow::applyTheme() {
@@ -482,6 +587,7 @@ void MainWindow::setupRibbon() {
     new QShortcut(QKeySequence("Ctrl+H"), this, this, &MainWindow::toggleHiddenFiles);
     new QShortcut(QKeySequence("Ctrl+T"), this, this, [this] { openNewTab(QDir::homePath()); });
     new QShortcut(QKeySequence("Ctrl+W"), this, this, &MainWindow::closeCurrentTab);
+    new QShortcut(QKeySequence("Ctrl+Shift+D"), this, this, &MainWindow::duplicateCurrentTab);
     new QShortcut(QKeySequence("Alt+Left"), this, this, &MainWindow::onBackClicked);
     new QShortcut(QKeySequence("Alt+Right"), this, this, &MainWindow::onForwardClicked);
     new QShortcut(QKeySequence("Alt+Up"), this, this, &MainWindow::onUpClicked);
@@ -692,7 +798,10 @@ void MainWindow::refreshTopTabBar() {
         tabBtn->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
         tabBtn->setCursor(Qt::PointingHandCursor);
         int index = i;
+        tabBtn->setProperty("tabIndex", index);
+        tabBtn->setContextMenuPolicy(Qt::CustomContextMenu);
         connect(tabBtn, &QToolButton::clicked, this, [this, index] { tabs->setCurrentIndex(index); });
+        connect(tabBtn, &QToolButton::customContextMenuRequested, this, &MainWindow::openTabContextMenu);
         topTabBarLayout->addWidget(tabBtn);
 
         if (tabs->count() > 1) {
@@ -919,6 +1028,19 @@ void MainWindow::onCurrentTabChanged(int index) {
     if (index < 0) return;
     fileView = qobject_cast<QTreeView *>(tabs->widget(index));
 
+    if (SettingsManager::getAnimations() && fileView) {
+        QTreeView *tv = fileView;
+        auto *eff = new QGraphicsOpacityEffect(tv);
+        tv->setGraphicsEffect(eff);
+        eff->setOpacity(0.0);
+        QPropertyAnimation *fade = new QPropertyAnimation(eff, "opacity", tv);
+        fade->setDuration(140);
+        fade->setStartValue(0.0);
+        fade->setEndValue(1.0);
+        connect(fade, &QPropertyAnimation::finished, tv, [tv] { tv->setGraphicsEffect(nullptr); });
+        fade->start(QAbstractAnimation::DeleteWhenStopped);
+    }
+
     if (fileView) {
         updateAddressBar();
         updateSelectionActions();
@@ -989,7 +1111,7 @@ void MainWindow::navigateTabTo(const QString &path) {
     maybeShowAdminToast(path);
     updateAddressBar();
     int total = model->rowCount(fileView->rootIndex());
-    if (statusLabel) statusLabel->setText(T("items_count").arg(total));
+    if (statusLabel) statusLabel->setText(itemsWithFreeSpace(total, path));
     if (statusSelectionLabel) statusSelectionLabel->setText("");
     int idx = tabs->indexOf(fileView);
     if (idx >= 0) {
@@ -1211,7 +1333,7 @@ void MainWindow::refreshCurrentView() {
     fileView->setRootIndex(QModelIndex());
     fileView->setRootIndex(model->index(path));
     int total = model->rowCount(fileView->rootIndex());
-    if (statusLabel) statusLabel->setText(T("items_count").arg(total));
+    if (statusLabel) statusLabel->setText(itemsWithFreeSpace(total, path));
     if (!trashPath.isEmpty() && trashItem) {
         bool full = QDir(trashPath).exists() && !QDir(trashPath).entryList(QDir::NoDotAndDotDot | QDir::AllEntries).isEmpty();
         trashItem->setIcon(QIcon(full ? ":/icons/trash_full.ico" : ":/icons/trash_empty.ico"));
@@ -1279,6 +1401,17 @@ void MainWindow::maybeShowAdminToast(const QString &path) {
     updateAdminToastPosition();
     adminToast->show();
     adminToast->raise();
+    if (SettingsManager::getAnimations()) {
+        QPoint target = adminToast->pos();
+        QPoint start = target + QPoint(0, 20);
+        adminToast->move(start);
+        QPropertyAnimation *slide = new QPropertyAnimation(adminToast, "pos", adminToast);
+        slide->setDuration(220);
+        slide->setEasingCurve(QEasingCurve::OutCubic);
+        slide->setStartValue(start);
+        slide->setEndValue(target);
+        slide->start(QAbstractAnimation::DeleteWhenStopped);
+    }
 }
 
 void MainWindow::updateAdminToastPosition() {
@@ -1302,7 +1435,8 @@ void MainWindow::moveEvent(QMoveEvent *event) {
 
 bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
     // Maus-Seitentasten: Vor- und Zurücknavigation
-    if (event->type() == QEvent::MouseButtonRelease) {
+    if (event->type() == QEvent::MouseButtonRelease &&
+        SettingsManager::getMouseSideNav()) {
         auto *me = static_cast<QMouseEvent *>(event);
         if (me->button() == Qt::BackButton) {
             if (me->modifiers() == Qt::NoModifier) onBackClicked();
@@ -1321,7 +1455,7 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
             return true;
         }
     }
-    if (obj == sidebar->viewport()) {
+    if (sidebar && obj == sidebar->viewport()) {
         if (event->type() == QEvent::DragEnter || event->type() == QEvent::DragMove) {
             auto *drop = static_cast<QDragEnterEvent *>(event);
             if (drop->mimeData()->hasUrls()) {
@@ -1421,7 +1555,12 @@ void MainWindow::showContextMenu(const QPoint &pos) {
     if (index.isValid()) {
         QString path = model->filePath(index);
         bool dir = model->isDir(index);
+        bool isZip = !dir && QFileInfo(path).suffix().compare(QStringLiteral("zip"), Qt::CaseInsensitive) == 0;
+        if (!view->selectionModel()->isSelected(index)) {
+            view->selectionModel()->select(index, QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
+        }
         QAction *open = menu.addAction(colorizeIcon(":/icons/open_folder.svg", iconColor), T("open"));
+        QAction *openTab = dir ? menu.addAction(QIcon(":/icons/folder_open.ico"), T("open_new_tab")) : nullptr;
         menu.addSeparator();
         QAction *copy = menu.addAction(colorizeIcon(":/icons/copy.svg", iconColor), T("copy"));
         QAction *cut = menu.addAction(colorizeIcon(":/icons/cut.svg", iconColor), T("cut"));
@@ -1430,10 +1569,13 @@ void MainWindow::showContextMenu(const QPoint &pos) {
         menu.addSeparator();
         QAction *rename = menu.addAction(colorizeIcon(":/icons/rename.svg", iconColor), T("rename"));
         QAction *remove = menu.addAction(colorizeIcon(":/icons/delete.svg", iconColor), T("delete"));
+        QAction *compress = menu.addAction(QIcon(":/icons/zip.ico"), T("compress"));
+        QAction *extract = isZip ? menu.addAction(QIcon(":/icons/zip.ico"), T("extract_here")) : nullptr;
         menu.addSeparator();
         QAction *props = menu.addAction(colorizeIcon(":/icons/info.svg", iconColor), T("properties"));
 
         connect(open, &QAction::triggered, this, [this, path, dir] { if (dir) navigateTo(path); else QDesktopServices::openUrl(QUrl::fromLocalFile(path)); });
+        if (openTab) connect(openTab, &QAction::triggered, this, [this, path] { openNewTab(path); });
         connect(copy, &QAction::triggered, this, [this, path] { clipboardPath = path; isCut = false; updateSelectionActions(); });
         connect(cut, &QAction::triggered, this, [this, path] { clipboardPath = path; isCut = true; updateSelectionActions(); });
         connect(copyPath, &QAction::triggered, this, [path] { QApplication::clipboard()->setText(path); });
@@ -1442,6 +1584,8 @@ void MainWindow::showContextMenu(const QPoint &pos) {
         });
         connect(rename, &QAction::triggered, this, &MainWindow::renameSelected);
         connect(remove, &QAction::triggered, this, &MainWindow::deleteSelected);
+        connect(compress, &QAction::triggered, this, &MainWindow::createZip);
+        if (extract) connect(extract, &QAction::triggered, this, &MainWindow::extractZip);
         connect(props, &QAction::triggered, this, [this, path] {
             QFileInfo i(path);
             QString type = i.isDir() ? T("type_folder")
@@ -1471,6 +1615,109 @@ void MainWindow::showContextMenu(const QPoint &pos) {
         connect(term, &QAction::triggered, this, &MainWindow::openInTerminal);
     }
     menu.exec(view->viewport()->mapToGlobal(pos));
+}
+
+void MainWindow::duplicateCurrentTab() {
+    if (!fileView) return;
+    const QString path = model->filePath(fileView->rootIndex());
+    openNewTab(path.isEmpty() ? QStringLiteral("computer://") : path);
+}
+
+void MainWindow::openTabContextMenu(const QPoint &pos) {
+    auto *btn = qobject_cast<QToolButton *>(sender());
+    if (!btn) return;
+    const int index = btn->property("tabIndex").toInt();
+    if (index < 0 || index >= tabs->count()) return;
+
+    QMenu menu(this);
+    QAction *dup = menu.addAction(T("duplicate_tab"));
+    QAction *close = menu.addAction(T("close_tab"));
+
+    connect(dup, &QAction::triggered, this, [this, index] {
+        auto *v = qobject_cast<QTreeView *>(tabs->widget(index));
+        if (v)
+            openNewTab(model->filePath(v->rootIndex()));
+        else
+            openNewTab(QStringLiteral("computer://"));
+    });
+    connect(close, &QAction::triggered, this, [this, index] { onTabCloseRequested(index); });
+    menu.exec(btn->mapToGlobal(pos));
+}
+
+void MainWindow::createZip() {
+    if (!fileView || !fileView->selectionModel()) return;
+    QModelIndexList sel = fileView->selectionModel()->selectedRows();
+    if (sel.isEmpty()) return;
+
+    const QString zipBin = QStandardPaths::findExecutable(QStringLiteral("zip"));
+    if (zipBin.isEmpty()) {
+        ModernConfirmDialog dlg(T("error"), T("zip_missing"), this, T("ok"), false);
+        dlg.exec();
+        return;
+    }
+
+    QString current = model->filePath(fileView->rootIndex());
+    QString baseName = model->fileName(sel.first());
+    if (sel.size() > 1) baseName = QFileInfo(current).fileName();
+    if (baseName.isEmpty()) baseName = QStringLiteral("archive");
+
+    QStringList names;
+    for (const QModelIndex &i : sel) names << model->fileName(i);
+
+    QString out = QDir(current).filePath(baseName + ".zip");
+    int counter = 1;
+    while (QFile::exists(out))
+        out = QDir(current).filePath(baseName + QString::number(counter++) + ".zip");
+
+    QStringList args{ "-r", "-q", out };
+    args += names;
+
+    auto *proc = new QProcess(this);
+    proc->setWorkingDirectory(current);
+    connect(proc, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+            this, [this, proc, out](int code, QProcess::ExitStatus st) {
+        proc->deleteLater();
+        if (st == QProcess::NormalExit && code == 0) {
+            if (statusLabel) statusLabel->setText(T("zip_done").arg(out));
+            refreshCurrentView();
+        } else {
+            ModernConfirmDialog dlg(T("error"), T("zip_failed"), this, T("ok"), false);
+            dlg.exec();
+        }
+    });
+    proc->start(zipBin, args);
+}
+
+void MainWindow::extractZip() {
+    if (!fileView || !fileView->selectionModel()) return;
+    QModelIndexList sel = fileView->selectionModel()->selectedRows();
+    if (sel.size() != 1) return;
+
+    const QString zipPath = model->filePath(sel.first());
+    const QString unzipBin = QStandardPaths::findExecutable(QStringLiteral("unzip"));
+    if (unzipBin.isEmpty()) {
+        ModernConfirmDialog dlg(T("error"), T("zip_missing"), this, T("ok"), false);
+        dlg.exec();
+        return;
+    }
+
+    QString targetDir = QFileInfo(zipPath).dir().filePath(QFileInfo(zipPath).completeBaseName());
+    QDir().mkpath(targetDir);
+
+    auto *proc = new QProcess(this);
+    proc->setWorkingDirectory(targetDir);
+    connect(proc, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+            this, [this, proc, targetDir](int code, QProcess::ExitStatus st) {
+        proc->deleteLater();
+        if (st == QProcess::NormalExit && code == 0) {
+            if (statusLabel) statusLabel->setText(T("unzip_done").arg(targetDir));
+            refreshCurrentView();
+        } else {
+            ModernConfirmDialog dlg(T("error"), T("zip_failed"), this, T("ok"), false);
+            dlg.exec();
+        }
+    });
+    proc->start(unzipBin, { "-o", "-q", zipPath });
 }
 
 void MainWindow::showSortMenu() {
@@ -1582,9 +1829,10 @@ void MainWindow::deleteSelected() {
 
     QString message = T("delete_msg").arg(selected.size());
 
-    ModernConfirmDialog dialog(T("delete_confirm"), message, this);
-
-    if (dialog.exec() != QDialog::Accepted) return;
+    if (SettingsManager::getConfirmDelete()) {
+        ModernConfirmDialog dialog(T("delete_confirm"), message, this);
+        if (dialog.exec() != QDialog::Accepted) return;
+    }
 
     // Kein Papierkorb verfügbar (z.B. Windows) → endgültig löschen
     if (trashPath.isEmpty()) {

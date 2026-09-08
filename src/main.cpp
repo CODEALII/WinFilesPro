@@ -28,12 +28,14 @@ int main(int argc, char *argv[]) {
     AppStyle::setTheme(SettingsManager::getTheme());
 
     // Startpfad: optionales Argument (z.B. nach erneutem Start als root),
-    // sonst der zuletzt besuchte Ordner
+    // sonst - falls aktiviert - der zuletzt besuchte Ordner
     QString startPath;
     const QStringList args = QCoreApplication::arguments();
-    if (args.size() > 1 && QDir(args.at(1)).exists()) {
+    if (args.contains(QStringLiteral("--elevated"))) {
+        // Wird im MainWindow-Konstruktor geöffnet
+    } else if (args.size() > 1 && QDir(args.at(1)).exists()) {
         startPath = args.at(1);
-    } else {
+    } else if (SettingsManager::getRestoreLastPath()) {
         const QString last = SettingsManager::getLastPath();
         if (QDir(last).exists()) startPath = last;
     }

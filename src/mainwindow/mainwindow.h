@@ -19,6 +19,8 @@
 #include <QWidget>
 #include <QScrollArea>
 #include <QTimer>
+#include <QProcess>
+#include <QShowEvent>
 #include "iconprovider.h"
 #include "i18n.h"
 
@@ -33,6 +35,7 @@ protected:
     void closeEvent(QCloseEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
     void moveEvent(QMoveEvent *event) override;
+    void showEvent(QShowEvent *event) override;
     bool eventFilter(QObject *obj, QEvent *event) override;
 
 private:
@@ -104,8 +107,8 @@ private:
     QAction *hiddenFilesAction;
     QAction *terminalAction;
 
-    QSplitter *mainSplitter;
-    QTreeView *sidebar;
+    QSplitter *mainSplitter = nullptr;
+    QTreeView *sidebar = nullptr;
     QTreeView *fileView;
     QFileSystemModel *model;
     QLineEdit *searchBar;
@@ -130,10 +133,22 @@ private:
     void updateAdminToastPosition();
     void addPinnedItem(const QString &path);
     void showSidebarContextMenu(const QPoint &pos);
+    void launchElevated(const QString &path);
+    void stopElevationWait();
+    void duplicateCurrentTab();
+    void openTabContextMenu(const QPoint &pos);
+    void createZip();
+    void extractZip();
 
     QWidget *adminToast = nullptr;
     QString adminToastPath;
     QStringList pinnedPaths;
+
+    QProcess *elevateProcess = nullptr;
+    QTimer *elevatePoll = nullptr;
+    QString elevateMarker;
+    QString elevatedStartPath;
+    bool windowShownOnce = false;
 
     QString trashPath;
     QString clipboardPath;

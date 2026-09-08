@@ -1,5 +1,6 @@
 #pragma once
 #include <QString>
+#include <QStringList>
 #include <QSize>
 #include <QPoint>
 #include "i18n.h"
@@ -32,6 +33,10 @@ public:
     // Versteckte Dateien
     static bool getShowHidden();
     static void setShowHidden(bool show);
+
+    // Angepinnte Ordner im Schnellzugriff
+    static QStringList getPinnedPaths();
+    static void setPinnedPaths(const QStringList &paths);
 
 private:
     static Language s_language;

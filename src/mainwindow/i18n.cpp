@@ -53,7 +53,10 @@ void I18n::init() {
     s_de["this_pc"]        = "Dieser PC";
     s_de["open"]           = "Öffnen";
     s_de["copy_path"]      = "Pfad kopieren";
-    s_de["pin_quick"]      = "An Schnellzugriff anheften";
+    s_de["pin_quick"]       = "An Schnellzugriff anheften";
+    s_de["unpin"]            = "Aus Schnellzugriff entfernen";
+    s_de["admin_toast_title"] = "Dieser Ordner erfordert Administratorrechte";
+    s_de["admin_toast_open"]  = "Mit erhöhten Rechten öffnen";
     s_de["new_folder_ctx"] = "Neuer Ordner";
     s_de["new_file_ctx"]   = "Neue Datei";
     s_de["term_ctx"]       = "Terminal hier öffnen";
@@ -138,7 +141,7 @@ void I18n::init() {
     s_de["settings_lang_de"]  = "Deutsch";
     s_de["settings_lang_en"]  = "English";
     s_de["settings_about"]    = "Über WinFilesPro";
-    s_de["settings_version"]  = "Version 0.3.0 · Qt6 · Open Source";
+    s_de["settings_version"]  = "Version 0.4.0 · Qt6 · Open Source";
     s_de["settings_restart"]  = "Neustart erforderlich für Sprachänderung";
     s_de["settings_save"]     = "Speichern";
     s_de["settings_hidden"]   = "Versteckte Dateien anzeigen";
@@ -195,7 +198,10 @@ void I18n::init() {
     s_en["this_pc"]        = "This PC";
     s_en["open"]           = "Open";
     s_en["copy_path"]      = "Copy Path";
-    s_en["pin_quick"]      = "Pin to Quick Access";
+    s_en["pin_quick"]       = "Pin to Quick Access";
+    s_en["unpin"]            = "Unpin from Quick Access";
+    s_en["admin_toast_title"] = "This folder requires administrator rights";
+    s_en["admin_toast_open"]  = "Open with elevated rights";
     s_en["new_folder_ctx"] = "New Folder";
     s_en["new_file_ctx"]   = "New File";
     s_en["term_ctx"]       = "Open Terminal Here";
@@ -280,7 +286,7 @@ void I18n::init() {
     s_en["settings_lang_de"]  = "Deutsch";
     s_en["settings_lang_en"]  = "English";
     s_en["settings_about"]    = "About WinFilesPro";
-    s_en["settings_version"]  = "Version 0.3.0 · Qt6 · Open Source";
+    s_en["settings_version"]  = "Version 0.4.0 · Qt6 · Open Source";
     s_en["settings_restart"]  = "Restart required for language change";
     s_en["settings_save"]     = "Save";
     s_en["settings_hidden"]   = "Show hidden files";

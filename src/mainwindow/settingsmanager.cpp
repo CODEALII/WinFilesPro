@@ -115,3 +115,14 @@ bool SettingsManager::getShowHidden() {
 void SettingsManager::setShowHidden(bool show) {
     s_showHidden = show;
 }
+
+QStringList SettingsManager::getPinnedPaths() {
+    QSettings settings("WinFilesPro", "WinFilesPro");
+    return settings.value("pinnedPaths").toStringList();
+}
+
+void SettingsManager::setPinnedPaths(const QStringList &paths) {
+    QSettings settings("WinFilesPro", "WinFilesPro");
+    settings.setValue("pinnedPaths", paths);
+    settings.sync();
+}

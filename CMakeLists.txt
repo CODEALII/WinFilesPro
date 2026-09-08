@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(WinFilesPro VERSION 0.3.0 LANGUAGES CXX)
+project(WinFilesPro VERSION 0.4.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -29,6 +29,10 @@ add_executable(WinFilesPro
 )
 
 target_link_libraries(WinFilesPro PRIVATE Qt6::Widgets Qt6::Network)
+
+if(WIN32)
+    target_sources(WinFilesPro PRIVATE WinFilesPro.rc)
+endif()
 
 target_compile_definitions(WinFilesPro PRIVATE QT_NO_PLATFORM_THEME_INTEGRATION)
 target_compile_definitions(WinFilesPro PRIVATE WINFILESPRO_VERSION="${PROJECT_VERSION}")

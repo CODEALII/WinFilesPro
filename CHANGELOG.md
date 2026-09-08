@@ -1,5 +1,14 @@
 # WinFilesPro Changelog
 
+## [0.4.0] - 2026-09-08
+
+### Features
+- App icon set to Explorer icon for window, taskbar and Windows executable
+- All disk partitions shown under "This PC" (not just root/media/mnt mounts)
+- "Date modified" column now right-aligned in the file view
+- Protected folders (requiring administrator rights) show a toast notification; clicking it reopens the app with elevated rights via the OS password dialog
+- Folders can be pinned to Quick Access via the context menu or by dragging them onto the sidebar; pins persist across restarts and can be removed via context menu
+
 ## [0.3.0] - 2026-09-08
 
 ### Security
@@ -92,6 +101,6 @@
 
 ---
 
-**Current Version**: 0.3.0 (Stable Release)  
+**Current Version**: 0.4.0 (Stable Release)  
 **Release Date**: 2026-09-08  
 **Maintenance**: Active

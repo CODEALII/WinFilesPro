@@ -27,9 +27,13 @@ class MainWindow : public QMainWindow {
 
 public:
     explicit MainWindow(QWidget *parent = nullptr);
+    void openPath(const QString &path);
 
 protected:
     void closeEvent(QCloseEvent *event) override;
+    void resizeEvent(QResizeEvent *event) override;
+    void moveEvent(QMoveEvent *event) override;
+    bool eventFilter(QObject *obj, QEvent *event) override;
 
 private:
     void setupRibbon();
@@ -121,6 +125,15 @@ private:
 
     // NEU: Settings-Button in Sidebar
     QPushButton *settingsBtn;
+
+    void maybeShowAdminToast(const QString &path);
+    void updateAdminToastPosition();
+    void addPinnedItem(const QString &path);
+    void showSidebarContextMenu(const QPoint &pos);
+
+    QWidget *adminToast = nullptr;
+    QString adminToastPath;
+    QStringList pinnedPaths;
 
     QString trashPath;
     QString clipboardPath;

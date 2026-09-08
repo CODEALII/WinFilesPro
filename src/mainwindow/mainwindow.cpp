@@ -41,7 +41,60 @@
 #include <QScrollArea>
 #include <QProgressBar>
 #include <QFrame>
+#include <QStyledItemDelegate>
+#include <QDragEnterEvent>
+#include <QDropEvent>
+#include <QMimeData>
 #include <functional>
+
+#ifndef Q_OS_WIN32
+#include <unistd.h>
+#endif
+
+// ---------------------------------------------------------------------------
+// Hilfsfunktionen
+// ---------------------------------------------------------------------------
+
+// Rechtebündige Anzeige für die Spalte "Geändert am"
+class DateColumnDelegate : public QStyledItemDelegate {
+public:
+    explicit DateColumnDelegate(QObject *parent) : QStyledItemDelegate(parent) {}
+    void initStyleOption(QStyleOptionViewItem *option, const QModelIndex &index) const override {
+        QStyledItemDelegate::initStyleOption(option, index);
+        if (index.column() == 3)
+            option->displayAlignment = Qt::AlignRight | Qt::AlignVCenter;
+    }
+};
+
+// Nur echte Datenträger anzeigen (echte Partitionen + Wechselmedien/Root),
+// aber keine Pseudo-Dateisysteme (proc, tmpfs, snap-Loopdevices, ...).
+static bool isUsableVolume(const QStorageInfo &storage) {
+    if (!storage.isValid() || !storage.isReady()) return false;
+    const QString root = storage.rootPath();
+    if (root == "/") return true;
+    const bool removable = root.startsWith("/media") || root.startsWith("/mnt") || root.startsWith("/run/media");
+    if (removable) return true;
+    const QString device = storage.device();
+    if (!device.startsWith("/dev/")) return false;
+    if (device.startsWith("/dev/loop")) return false;
+    return true;
+}
+
+// Braucht der aktuelle Benutzer erhöhte Rechte, um den Ordner überhaupt zu lesen?
+static bool needsElevation(const QString &path) {
+#ifdef Q_OS_WIN32
+    Q_UNUSED(path);
+    return false;
+#else
+    return ::getuid() != 0 && QFileInfo(path).exists() && !QFileInfo(path).isReadable();
+#endif
+}
+
+// App mit polkit (OS-Passwortdialog) als root neu starten
+static void launchElevated(const QString &path) {
+    const QString app = QCoreApplication::applicationFilePath();
+    QProcess::startDetached(QStringLiteral("pkexec"), {app, path});
+}
 
 // ---------------------------------------------------------------------------
 // Hilfsfunktion: SVG-Icon in einer bestimmten Farbe einfärben
@@ -442,6 +495,22 @@ void MainWindow::setupLayout() {
         quick->appendRow(item);
     }
 
+    // Angepinnte Ordner aus den Einstellungen laden
+    pinnedPaths = SettingsManager::getPinnedPaths();
+    for (const QString &p : pinnedPaths) {
+        if (p.isEmpty() || !QFileInfo(p).isDir()) continue;
+        bool exists = false;
+        for (int r = 0; r < quick->rowCount(); ++r) {
+            if (quick->child(r)->data(Qt::UserRole).toString() == p) { exists = true; break; }
+        }
+        if (exists) continue;
+        QStandardItem *item = new QStandardItem(QIcon(":/icons/pinquickaccess.ico"), QFileInfo(p).fileName());
+        item->setData(p, Qt::UserRole);
+        item->setData(true, Qt::UserRole + 1);
+        item->setEditable(false);
+        quick->appendRow(item);
+    }
+
     bool trashFull = false;
     if (!trashPath.isEmpty()) {
         trashFull = QDir(trashPath).exists() && !QDir(trashPath).entryList(QDir::NoDotAndDotDot | QDir::AllEntries).isEmpty();
@@ -457,9 +526,8 @@ void MainWindow::setupLayout() {
     sideModel->appendRow(computer);
 
     for (const QStorageInfo &storage : QStorageInfo::mountedVolumes()) {
-        if (!storage.isValid() || !storage.isReady()) continue;
+        if (!isUsableVolume(storage)) continue;
         QString path = storage.rootPath();
-        if (path != "/" && !path.startsWith("/media") && !path.startsWith("/mnt") && !path.startsWith("/run/media")) continue;
         double gb = storage.bytesTotal() / 1e9;
         QString name = storage.displayName().isEmpty() ? path : storage.displayName();
         if (storage.isRoot()) name += " (System)";
@@ -479,9 +547,14 @@ void MainWindow::setupLayout() {
     sidebar->setMinimumWidth(220);
     sidebar->setMaximumWidth(300);
     sidebar->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    sidebar->setContextMenuPolicy(Qt::NoContextMenu);
+    sidebar->setContextMenuPolicy(Qt::CustomContextMenu);
+    sidebar->setAcceptDrops(true);
+    sidebar->setDropIndicatorShown(true);
+    sidebar->setDragDropMode(QAbstractItemView::DropOnly);
+    sidebar->viewport()->installEventFilter(this);
     sidebar->expandAll();
     connect(sidebar, &QTreeView::clicked, this, &MainWindow::onSidebarClicked);
+    connect(sidebar, &QTreeView::customContextMenuRequested, this, &MainWindow::showSidebarContextMenu);
 
     // QTabWidget bleibt vollkommen normal - NICHTS wird aus ihm herausgerissen.
     tabs = new QTabWidget;
@@ -883,6 +956,7 @@ void MainWindow::navigateTabTo(const QString &path) {
     }
 
     fileView->setRootIndex(model->index(path));
+    maybeShowAdminToast(path);
     updateAddressBar();
     int total = model->rowCount(fileView->rootIndex());
     if (statusLabel) statusLabel->setText(T("items_count").arg(total));
@@ -923,9 +997,8 @@ void MainWindow::openNewTab(const QString &path) {
 
         int row = 0, col = 0;
         for (const QStorageInfo &storage : QStorageInfo::mountedVolumes()) {
-            if (!storage.isValid() || !storage.isReady()) continue;
+            if (!isUsableVolume(storage)) continue;
             QString root = storage.rootPath();
-            if (root != "/" && !root.startsWith("/media") && !root.startsWith("/mnt") && !root.startsWith("/run/media")) continue;
 
             QString name = storage.displayName().isEmpty()
                    ? T("local_disk") + " (" + root + ")"
@@ -973,10 +1046,13 @@ void MainWindow::openNewTab(const QString &path) {
     view->setColumnWidth(1, 120);
     view->setColumnWidth(2, 200);
     view->setColumnWidth(3, 200);
+    view->setItemDelegateForColumn(3, new DateColumnDelegate(view));
 
     connect(view, &QTreeView::customContextMenuRequested, this, &MainWindow::showContextMenu);
     connect(view, &QTreeView::doubleClicked, this, &MainWindow::onFileDoubleClicked);
     connect(view->selectionModel(), &QItemSelectionModel::selectionChanged, this, &MainWindow::onFileSelectionChanged);
+
+    maybeShowAdminToast(path);
 
     QString title = QFileInfo(path).fileName();
     if (title.isEmpty()) title = path;
@@ -1106,6 +1182,155 @@ void MainWindow::refreshCurrentView() {
     }
 }
 
+void MainWindow::openPath(const QString &path) {
+    navigateTo(path);
+}
+
+void MainWindow::maybeShowAdminToast(const QString &path) {
+    if (!needsElevation(path)) {
+        if (adminToast) adminToast->hide();
+        return;
+    }
+    adminToastPath = path;
+
+    if (!adminToast) {
+        const ThemeColors &c = AppStyle::colors();
+        adminToast = new QWidget(this);
+        adminToast->setObjectName("adminToast");
+        adminToast->setStyleSheet(QString(R"(
+            QWidget#adminToast {
+                background-color: %1;
+                border: 1px solid %3;
+                border-radius: 10px;
+            }
+            QLabel { background: transparent; border: none; }
+            QLabel#toastTitle { color: %2; font-size: 13px; font-weight: 600; }
+            QLabel#toastHint { color: %4; font-size: 11px; }
+        )").arg(c.elevatedBg, c.textPrimary, c.border, c.textSecondary));
+        adminToast->setAttribute(Qt::WA_StyledBackground, true);
+        adminToast->setCursor(Qt::PointingHandCursor);
+        adminToast->installEventFilter(this);
+
+        QGraphicsDropShadowEffect *shadow = new QGraphicsDropShadowEffect(adminToast);
+        shadow->setBlurRadius(30);
+        shadow->setColor(QColor(0, 0, 0, 110));
+        shadow->setOffset(0, 4);
+        adminToast->setGraphicsEffect(shadow);
+
+        QHBoxLayout *lay = new QHBoxLayout(adminToast);
+        lay->setContentsMargins(16, 12, 18, 12);
+        lay->setSpacing(12);
+
+        QLabel *icon = new QLabel(adminToast);
+        icon->setPixmap(QIcon(":/icons/shield.ico").pixmap(24, 24));
+
+        QLabel *title = new QLabel(T("admin_toast_title"), adminToast);
+        title->setObjectName("toastTitle");
+        QLabel *hint = new QLabel(T("admin_toast_open"), adminToast);
+        hint->setObjectName("toastHint");
+
+        QVBoxLayout *textLay = new QVBoxLayout;
+        textLay->setSpacing(2);
+        textLay->addWidget(title);
+        textLay->addWidget(hint);
+
+        lay->addWidget(icon);
+        lay->addLayout(textLay);
+    }
+
+    updateAdminToastPosition();
+    adminToast->show();
+    adminToast->raise();
+}
+
+void MainWindow::updateAdminToastPosition() {
+    if (!adminToast) return;
+    adminToast->adjustSize();
+    const int margin = 16;
+    const int statusH = statusBar() ? statusBar()->height() : 0;
+    const int y = height() - statusH - adminToast->height() - margin;
+    adminToast->move(width() - adminToast->width() - margin, qMax(0, y));
+}
+
+void MainWindow::resizeEvent(QResizeEvent *event) {
+    QMainWindow::resizeEvent(event);
+    updateAdminToastPosition();
+}
+
+void MainWindow::moveEvent(QMoveEvent *event) {
+    QMainWindow::moveEvent(event);
+    updateAdminToastPosition();
+}
+
+bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
+    if (obj == adminToast) {
+        if (event->type() == QEvent::MouseButtonRelease) {
+            launchElevated(adminToastPath);
+            if (adminToast) adminToast->hide();
+            return true;
+        }
+    }
+    if (obj == sidebar->viewport()) {
+        if (event->type() == QEvent::DragEnter || event->type() == QEvent::DragMove) {
+            auto *drop = static_cast<QDragEnterEvent *>(event);
+            if (drop->mimeData()->hasUrls()) {
+                drop->setDropAction(Qt::CopyAction);
+                drop->accept();
+                return true;
+            }
+        } else if (event->type() == QEvent::Drop) {
+            auto *drop = static_cast<QDropEvent *>(event);
+            if (drop->mimeData()->hasUrls()) {
+                const QList<QUrl> urls = drop->mimeData()->urls();
+                for (const QUrl &u : urls) {
+                    const QString p = u.toLocalFile();
+                    if (!p.isEmpty() && QFileInfo(p).isDir()) addPinnedItem(p);
+                }
+                drop->setDropAction(Qt::CopyAction);
+                drop->accept();
+                return true;
+            }
+        }
+    }
+    return QMainWindow::eventFilter(obj, event);
+}
+
+void MainWindow::addPinnedItem(const QString &path) {
+    if (!sideModel) return;
+    QStandardItem *quick = sideModel->item(0);
+    if (!quick) return;
+    if (path.isEmpty() || !QFileInfo(path).isDir()) return;
+    for (int r = 0; r < quick->rowCount(); ++r) {
+        if (quick->child(r)->data(Qt::UserRole).toString() == path) return;
+    }
+    QStandardItem *item = new QStandardItem(QIcon(":/icons/pinquickaccess.ico"), QFileInfo(path).fileName());
+    item->setData(path, Qt::UserRole);
+    item->setData(true, Qt::UserRole + 1);
+    item->setEditable(false);
+    quick->appendRow(item);
+    if (!pinnedPaths.contains(path)) pinnedPaths.append(path);
+    SettingsManager::setPinnedPaths(pinnedPaths);
+    sidebar->expandAll();
+}
+
+void MainWindow::showSidebarContextMenu(const QPoint &pos) {
+    QModelIndex index = sidebar->indexAt(pos);
+    if (!index.isValid()) return;
+    QStandardItem *item = sideModel->itemFromIndex(index);
+    if (!item || !item->data(Qt::UserRole + 1).toBool()) return;
+
+    const QString path = item->data(Qt::UserRole).toString();
+    QMenu menu(this);
+    QAction *unpin = menu.addAction(T("unpin"));
+    connect(unpin, &QAction::triggered, this, [this, item, path] {
+        QStandardItem *parentItem = item->parent();
+        if (parentItem) parentItem->removeRow(item->row());
+        pinnedPaths.removeAll(path);
+        SettingsManager::setPinnedPaths(pinnedPaths);
+    });
+    menu.exec(sidebar->viewport()->mapToGlobal(pos));
+}
+
 void MainWindow::showContextMenu(const QPoint &pos) {
     const ThemeColors &c = AppStyle::colors();
     QColor iconColor(c.textPrimary);
@@ -1136,10 +1361,7 @@ void MainWindow::showContextMenu(const QPoint &pos) {
         connect(cut, &QAction::triggered, this, [this, path] { clipboardPath = path; isCut = true; updateSelectionActions(); });
         connect(copyPath, &QAction::triggered, this, [path] { QApplication::clipboard()->setText(path); });
         connect(pin, &QAction::triggered, this, [this, path] {
-            QStandardItem *item = new QStandardItem(QIcon(":/icons/pinquickaccess.ico"), QFileInfo(path).fileName());
-            item->setData(path, Qt::UserRole);
-            item->setEditable(false);
-            sideModel->item(0)->appendRow(item);
+            addPinnedItem(path);
         });
         connect(rename, &QAction::triggered, this, &MainWindow::renameSelected);
         connect(remove, &QAction::triggered, this, &MainWindow::deleteSelected);

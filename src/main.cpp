@@ -1,5 +1,7 @@
 #include "mainwindow/mainwindow.h"
 #include "mainwindow/style.h"
+#include "mainwindow/settingsmanager.h"
+#include "mainwindow/i18n.h"
 #include <QApplication>
 #include <QStyleFactory>
 
@@ -16,9 +18,17 @@ int main(int argc, char *argv[]) {
     // damit garantiert nichts vom System durchscheint.
     QApplication::setStyle(QStyleFactory::create("Fusion"));
 
+    // Einstellungen laden
+    SettingsManager::load();
+    I18n::setLanguage(SettingsManager::getLanguage());
+    AppStyle::setTheme(SettingsManager::getTheme());
+
     MainWindow window;
     window.setWindowTitle("WinFilesPro");
-    window.resize(1200, 760);
+    QSize windowSize = SettingsManager::getWindowSize();
+    window.resize(windowSize);
+    QPoint windowPos = SettingsManager::getWindowPosition();
+    window.move(windowPos);
     window.show();
 
     return app.exec();

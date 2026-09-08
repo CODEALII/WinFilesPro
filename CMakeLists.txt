@@ -21,6 +21,8 @@ add_executable(WinFilesPro
     src/mainwindow/i18n.h
     src/mainwindow/settingsdialog.cpp
     src/mainwindow/settingsdialog.h
+    src/mainwindow/settingsmanager.cpp
+    src/mainwindow/settingsmanager.h
     assets/icons/resources.qrc
 )
 

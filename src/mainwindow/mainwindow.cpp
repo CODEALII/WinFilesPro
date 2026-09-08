@@ -1,6 +1,8 @@
 #include "mainwindow.h"
 #include "style.h"
+#include "settingsmanager.h"
 #include <QApplication>
+#include <QCloseEvent>
 #include <QAction>
 #include <QDir>
 #include <QFile>
@@ -1364,6 +1366,14 @@ void MainWindow::openSettings() {
     };
 
     dlg.exec();
+}
+
+void MainWindow::closeEvent(QCloseEvent *event) {
+    // Fenstergröße und Position speichern
+    SettingsManager::setWindowSize(size());
+    SettingsManager::setWindowPosition(pos());
+    SettingsManager::save();
+    event->accept();
 }
 
 #include "mainwindow.moc"

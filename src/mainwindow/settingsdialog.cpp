@@ -1,4 +1,5 @@
 #include "settingsdialog.h"
+#include "settingsmanager.h"
 #include <QGraphicsDropShadowEffect>
 #include <QCheckBox>
 #include <QFrame>
@@ -156,13 +157,17 @@ void SettingsDialog::buildUi() {
         // Sprache anwenden
         if (selectedLang != I18n::language()) {
             I18n::setLanguage(selectedLang);
+            SettingsManager::setLanguage(selectedLang);
             if (onLanguageChanged) onLanguageChanged(selectedLang);
         }
         // Theme anwenden
         if (selectedTheme != AppStyle::currentTheme()) {
             AppStyle::setTheme(selectedTheme);
+            SettingsManager::setTheme(selectedTheme);
             if (onThemeChanged) onThemeChanged(selectedTheme);
         }
+        // Einstellungen speichern
+        SettingsManager::save();
         accept();
     });
 

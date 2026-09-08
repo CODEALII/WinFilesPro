@@ -1,0 +1,95 @@
+<RCC>
+    <qresource prefix="/icons">
+        <!-- === Basis / Struktur === -->
+        <file alias="computer.ico">../icons/Computer.ico</file>
+        <file alias="folder.ico">../icons/Folder.ico</file>
+        <file alias="hardware.ico">../icons/Hardware.ico</file>
+        <file alias="explorer.ico">../icons/Explorer.ico</file>
+        <file alias="blank.ico">../icons/Blank.ico</file>
+
+        <!-- === Bekannte Ordner === -->
+        <file alias="folder_desktop.ico">../icons/Folder Desktop.ico</file>
+        <file alias="folder_downloads.ico">../icons/Folder Downloads.ico</file>
+        <file alias="folder_documents.ico">../icons/Folder Documents.ico</file>
+        <file alias="folder_pictures.ico">../icons/Folder Pictures.ico</file>
+        <file alias="folder_music.ico">../icons/Folder Music.ico</file>
+        <file alias="folder_videos.ico">../icons/Folder Videos.ico</file>
+        <file alias="folder_onedrive.ico">../icons/Folder OneDrive.ico</file>
+        <file alias="folder_favourites.ico">../icons/Folder Favourites.ico</file>
+        <file alias="folder_open.ico">../icons/Folder Open.ico</file>
+
+        <!-- === Papierkorb / Schnellzugriff === -->
+        <file alias="trash_full.ico">../icons/Trash Full.ico</file>
+        <file alias="trash_empty.ico">../icons/Trash Empty.ico</file>
+        <file alias="pinquickaccess.ico">../icons/pinquickaccess.ico</file>
+        <file alias="shortcut.ico">../icons/shortcut.ico</file>
+
+        <!-- === Dateitypen === -->
+        <file alias="exe.ico">../icons/exe.ico</file>
+        <file alias="dll.ico">../icons/dll.ico</file>
+        <file alias="zip.ico">../icons/Zip.ico</file>
+        <file alias="audio.ico">../icons/Audio file.ico</file>
+        <file alias="video_file.ico">../icons/Video file.ico</file>
+        <file alias="notes.ico">../icons/Notes.ico</file>
+
+        <!-- Für PDF/Doc/Sheet/Image/Code/Text gibt es in deinem Ordner keine
+             eigenen Icons -> vorerst sinnvoll auf vorhandene Dateien gemappt,
+             bis du eigene ergänzt hast. -->
+        <file alias="pdf.ico">../icons/Notes.ico</file>
+        <file alias="doc.ico">../icons/Notes.ico</file>
+        <file alias="sheet.ico">../icons/Notes.ico</file>
+        <file alias="image.ico">../icons/Pictures file.ico</file>
+        <file alias="code.ico">../icons/Notes.ico</file>
+        <file alias="text.ico">../icons/Notes.ico</file>
+
+        <!-- === Sonstige System-Icons (aktuell ungenutzt im Code,
+             aber praktisch für zukünftige Features) === -->
+        <file alias="control_panel.ico">../icons/Control Panel.ico</file>
+        <file alias="desktop.ico">../icons/Desktop.ico</file>
+        <file alias="devices.ico">../icons/devices.ico</file>
+        <file alias="disc.ico">../icons/disc.ico</file>
+        <file alias="help.ico">../icons/Help 2.ico</file>
+        <file alias="info.ico">../icons/Info.ico</file>
+        <file alias="key.ico">../icons/Key.ico</file>
+        <file alias="library_videos.ico">../icons/Library Videos.ico</file>
+        <file alias="lock.ico">../icons/Lock.ico</file>
+        <file alias="network.ico">../icons/Network.ico</file>
+        <file alias="phone.ico">../icons/Phone.ico</file>
+        <file alias="pictures_file.ico">../icons/Pictures file.ico</file>
+        <file alias="printer.ico">../icons/Printer.ico</file>
+        <file alias="programs.ico">../icons/Programs.ico</file>
+        <file alias="search.ico">../icons/Search.ico</file>
+        <file alias="shield.ico">../icons/Shield.ico</file>
+        <file alias="stop.ico">../icons/Stop.ico</file>
+        <file alias="user.ico">../icons/User.ico</file>
+        <file alias="warning.ico">../icons/Warning.ico</file>
+        <file alias="controller.ico">../icons/controller.ico</file>
+        <file alias="defender.ico">../icons/defender.ico</file>
+        <file alias="delete_icon.ico">../icons/delete.ico</file>
+        <file alias="headphones.ico">../icons/headphones.ico</file>
+        <file alias="navigationarrow.ico">../icons/navigationarrow.ico</file>
+
+        <!-- === Fluent-SVGs (assets/fluent) === -->
+        <file alias="arw_left.svg">../fluent/arw_left.svg</file>
+        <file alias="arw_right.svg">../fluent/arw_right.svg</file>
+        <file alias="arw_up.svg">../fluent/arw_up.svg</file>
+        <file alias="refresh.svg">../fluent/refresh.svg</file>
+        <file alias="copy.svg">../fluent/copy.svg</file>
+        <file alias="cut.svg">../fluent/cut.svg</file>
+        <file alias="paste.svg">../fluent/paste.svg</file>
+        <file alias="delete.svg">../fluent/delete.svg</file>
+        <file alias="rename.svg">../fluent/rename.svg</file>
+        <file alias="open_folder.svg">../fluent/open_folder.svg</file>
+        <file alias="new_folder.svg">../fluent/new_folder.svg</file>
+        <file alias="new_file.svg">../fluent/new_file.svg</file>
+        <file alias="sort.svg">../fluent/sort.svg</file>
+        <file alias="view.svg">../fluent/view.svg</file>
+        <file alias="hidden.svg">../fluent/hidden.svg</file>
+        <file alias="terminal.svg">../fluent/terminal.svg</file>
+        <file alias="theme.svg">../fluent/theme.svg</file>
+        <file alias="search.svg">../fluent/search.svg</file>
+        <file alias="home.svg">../fluent/home.svg</file>
+        <file alias="link.svg">../fluent/link.svg</file>
+        <file alias="info.svg">../fluent/info.svg</file>
+    </qresource>
+</RCC>

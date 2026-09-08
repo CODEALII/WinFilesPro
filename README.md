@@ -66,4 +66,4 @@ If you wish to contribute to WinFilesPro, please feel free to fork the repositor
 
 ## License
 
-(Add your license information here)
+This project is licensed under the GNU General Public License v3.0 - see the LICENSE file for details.

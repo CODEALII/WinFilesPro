@@ -9,6 +9,8 @@
 #include <QButtonGroup>
 #include <QCheckBox>
 #include <QScrollArea>
+#include <QComboBox>
+#include <QListWidget>
 #include <functional>
 #include "style.h"
 #include "i18n.h"
@@ -25,6 +27,7 @@ public:
 
 signals:
     void restartNeeded();
+    void restartRequested();
 
 private:
     void buildUi();
@@ -39,6 +42,13 @@ private:
     QCheckBox *chkMouseNav = nullptr;
     QCheckBox *chkConfirmDelete = nullptr;
     QCheckBox *chkAnimations = nullptr;
+    QCheckBox *chkNavBar = nullptr;
+    QCheckBox *chkCmdBar = nullptr;
+    QCheckBox *chkTabsBar = nullptr;
+    QCheckBox *chkDeleteAfterAction = nullptr;
+    QCheckBox *chkHideSearch = nullptr;
+    QComboBox *unitsCombo = nullptr;
+    QListWidget *assocList = nullptr;
 
     // Pill-style toggle button pair
     QPushButton *langDe = nullptr;

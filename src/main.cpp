@@ -16,16 +16,17 @@ int main(int argc, char *argv[]) {
     QApplication app(argc, argv);
     app.setWindowIcon(QIcon(":/icons/explorer.ico"));
 
+    // Einstellungen laden
+    SettingsManager::load();
+    I18n::setLanguage(SettingsManager::getLanguage());
+    AppStyle::setTheme(SettingsManager::getTheme());
+
     // Sicherheitsnetz: falls Qt zur Laufzeit trotzdem versucht, ein
     // Plattform-Theme nachzuladen, erzwingen wir hier nochmal Fusion
     // und überschreiben die komplette Palette mit unseren eigenen Farben,
     // damit garantiert nichts vom System durchscheint.
     QApplication::setStyle(QStyleFactory::create("Fusion"));
-
-    // Einstellungen laden
-    SettingsManager::load();
-    I18n::setLanguage(SettingsManager::getLanguage());
-    AppStyle::setTheme(SettingsManager::getTheme());
+    AppStyle::applyPalette();
 
     // Startpfad: optionales Argument (z.B. nach erneutem Start als root),
     // sonst - falls aktiviert - der zuletzt besuchte Ordner

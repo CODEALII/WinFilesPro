@@ -193,3 +193,116 @@ void SettingsManager::setAnimations(bool v) {
     settings.setValue("opt/animations", v);
     settings.sync();
 }
+
+bool SettingsManager::getShowNavBar() {
+    QSettings settings("WinFilesPro", "WinFilesPro");
+    return settings.value("opt/showNavBar", true).toBool();
+}
+
+void SettingsManager::setShowNavBar(bool v) {
+    QSettings settings("WinFilesPro", "WinFilesPro");
+    settings.setValue("opt/showNavBar", v);
+    settings.sync();
+}
+
+bool SettingsManager::getShowCmdBar() {
+    QSettings settings("WinFilesPro", "WinFilesPro");
+    return settings.value("opt/showCmdBar", false).toBool();
+}
+
+void SettingsManager::setShowCmdBar(bool v) {
+    QSettings settings("WinFilesPro", "WinFilesPro");
+    settings.setValue("opt/showCmdBar", v);
+    settings.sync();
+}
+
+bool SettingsManager::getShowTabsBar() {
+    QSettings settings("WinFilesPro", "WinFilesPro");
+    return settings.value("opt/showTabs", true).toBool();
+}
+
+void SettingsManager::setShowTabsBar(bool v) {
+    QSettings settings("WinFilesPro", "WinFilesPro");
+    settings.setValue("opt/showTabs", v);
+    settings.sync();
+}
+
+int SettingsManager::getSizeUnits() {
+    QSettings settings("WinFilesPro", "WinFilesPro");
+    return settings.value("opt/sizeUnits", 0).toInt();
+}
+
+void SettingsManager::setSizeUnits(int v) {
+    QSettings settings("WinFilesPro", "WinFilesPro");
+    settings.setValue("opt/sizeUnits", v);
+    settings.sync();
+}
+
+bool SettingsManager::getDeleteAfterAction() {
+    QSettings settings("WinFilesPro", "WinFilesPro");
+    return settings.value("opt/deleteAfterAction", false).toBool();
+}
+
+void SettingsManager::setDeleteAfterAction(bool v) {
+    QSettings settings("WinFilesPro", "WinFilesPro");
+    settings.setValue("opt/deleteAfterAction", v);
+    settings.sync();
+}
+
+bool SettingsManager::getHideSearchBar() {
+    QSettings settings("WinFilesPro", "WinFilesPro");
+    return settings.value("opt/hideSearchBar", false).toBool();
+}
+
+void SettingsManager::setHideSearchBar(bool v) {
+    QSettings settings("WinFilesPro", "WinFilesPro");
+    settings.setValue("opt/hideSearchBar", v);
+    settings.sync();
+}
+
+QString SettingsManager::getAssoc(const QString &ext) {
+    QSettings settings("WinFilesPro", "WinFilesPro");
+    if (ext.isEmpty()) return QString();
+    return settings.value("assoc/" + ext).toString();
+}
+
+void SettingsManager::setAssoc(const QString &ext, const QString &cmd) {
+    QSettings settings("WinFilesPro", "WinFilesPro");
+    if (ext.isEmpty() || cmd.isEmpty()) return;
+    settings.setValue("assoc/" + ext, cmd);
+    settings.sync();
+}
+
+void SettingsManager::removeAssoc(const QString &ext) {
+    QSettings settings("WinFilesPro", "WinFilesPro");
+    settings.remove("assoc/" + ext);
+    settings.sync();
+}
+
+QStringList SettingsManager::assocExtensions() {
+    QSettings settings("WinFilesPro", "WinFilesPro");
+    const QStringList keys = settings.childGroups();
+    QStringList out;
+    for (const QString &k : keys) {
+        if (k == "General" || k == "opt" || k == "window") continue;
+        if (k == "assoc") {
+            settings.beginGroup("assoc");
+            out = settings.childKeys();
+            settings.endGroup();
+            break;
+        }
+    }
+    out.sort();
+    return out;
+}
+
+QStringList SettingsManager::getNetworkDrives() {
+    QSettings settings("WinFilesPro", "WinFilesPro");
+    return settings.value("networkDrives").toStringList();
+}
+
+void SettingsManager::setNetworkDrives(const QStringList &drives) {
+    QSettings settings("WinFilesPro", "WinFilesPro");
+    settings.setValue("networkDrives", drives);
+    settings.sync();
+}

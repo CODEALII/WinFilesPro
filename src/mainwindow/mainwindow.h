@@ -57,6 +57,11 @@ private:
     void updateSelectionActions();
     void updateAddressBar();
     void updateBreadcrumbs(const QString &path);
+    void startPathEdit();
+    void commitPathEdit(const QString &text);
+    void openFileWithAssoc(const QString &path);
+    void launchApp(const QString &app, const QString &file);
+    void convertToPng(const QString &path);
     void updateStatusDetails();
     void showAboutDialog();
     void showHelpDialog();
@@ -67,6 +72,10 @@ private:
     void copyPathToClipboard();
     void openInTerminal();
     void toggleHiddenFiles();
+    bool rowHiddenByPolicy(const QModelIndex &index) const;
+    void applyHiddenPolicyToView(QTreeView *view);
+    void applyHiddenPolicyToAllViews();
+    QModelIndexList visibleSelectedRows() const;
     void onSearchTextChanged(const QString &text);
     void onTabCloseRequested(int index);
     void onCurrentTabChanged(int index);
@@ -112,6 +121,7 @@ private:
     QTreeView *fileView;
     QFileSystemModel *model;
     QLineEdit *searchBar;
+    QLineEdit *pathEditor = nullptr;
     QTabWidget *tabs;
     QLabel *statusLabel;
     QLabel *statusSelectionLabel;
@@ -119,11 +129,14 @@ private:
     WinIconProvider iconProvider;
     QStandardItemModel *sideModel;
     QStandardItem *trashItem;
+    QToolBar *navToolbar = nullptr;
+    QToolBar *cmdToolbar = nullptr;
     QWidget *breadcrumbWidget;
     QHBoxLayout *breadcrumbLayout;
     QStringList breadcrumbPaths;
     QWidget *topTabBarHost;
     QHBoxLayout *topTabBarLayout;
+    QToolBar *tabBarToolbar = nullptr;
     QToolButton *topTabAddButton;
 
     // NEU: Settings-Button in Sidebar

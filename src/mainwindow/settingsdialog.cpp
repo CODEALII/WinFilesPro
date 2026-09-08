@@ -5,6 +5,13 @@
 #include <QFrame>
 #include <QApplication>
 #include <QProgressBar>
+#include <QComboBox>
+#include <QListWidget>
+#include <QLabel>
+#include <QPushButton>
+#include <QHBoxLayout>
+#include <QFileDialog>
+#include <QInputDialog>
 
 SettingsDialog::SettingsDialog(QWidget *parent, Updater *updater)
     : QDialog(parent),
@@ -15,7 +22,7 @@ SettingsDialog::SettingsDialog(QWidget *parent, Updater *updater)
 
     setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
     setAttribute(Qt::WA_TranslucentBackground);
-    setFixedSize(460, 640);
+    setFixedSize(470, 680);
 
     buildUi();
 }
@@ -135,7 +142,143 @@ void SettingsDialog::buildUi() {
     scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     scroll->setStyleSheet(QString("QScrollArea { background: transparent; border: none; }"
                                   "QScrollArea > QWidget > QWidget { background: transparent; }"));
-    layout->addWidget(scroll);
+
+    // Dateizuordnungen-Seite (eigener Tab)
+    QWidget *assocPage = new QWidget;
+    assocPage->setStyleSheet("background: transparent;");
+    QVBoxLayout *assocLayout = new QVBoxLayout(assocPage);
+    assocLayout->setContentsMargins(16, 16, 16, 16);
+    assocLayout->setSpacing(10);
+
+    QListWidget *list = new QListWidget(assocPage);
+    list->setObjectName("assocList");
+    list->setSelectionMode(QAbstractItemView::SingleSelection);
+    list->setStyleSheet(QString(R"(
+        QListWidget {
+            background-color: %1;
+            border: 1px solid %2;
+            border-radius: 8px;
+            color: %3;
+            font-size: 13px;
+            padding: 4px;
+        }
+        QListWidget::item {
+            padding: 6px 8px;
+            border: none;
+            border-radius: 4px;
+        }
+        QListWidget::item:hover { background-color: %4; }
+        QListWidget::item:selected { background-color: %5; color: %3; }
+    )").arg(c.surfaceBg, c.border, c.textPrimary, c.hoverBg, c.selectedBg));
+    assocList = list;
+
+    // Bestehende Zuordnungen laden
+    const QStringList exts = SettingsManager::assocExtensions();
+    for (const QString &ext : exts) {
+        const QString app = SettingsManager::getAssoc(ext);
+        if (app.isEmpty()) continue;
+        list->addItem(QString(".%1  →  %2").arg(ext, QFileInfo(app).fileName()));
+    }
+
+    connect(list, &QListWidget::itemDoubleClicked, this, [this, list](QListWidgetItem *item) {
+        const int row = list->row(item);
+        if (row < 0) return;
+        const QStringList exts = SettingsManager::assocExtensions();
+        if (row >= exts.size()) return;
+        const QString ext = exts.at(row);
+        const QString current = SettingsManager::getAssoc(ext);
+        const QString newApp = QFileDialog::getOpenFileName(this, T("assoc_pick_app"), current);
+        if (newApp.isEmpty()) return;
+        SettingsManager::setAssoc(ext, newApp);
+        item->setText(QString(".%1  →  %2").arg(ext, QFileInfo(newApp).fileName()));
+    });
+
+    QWidget *assocButtons = new QWidget(assocPage);
+    assocButtons->setStyleSheet("background: transparent;");
+    QHBoxLayout *assocBtnLayout = new QHBoxLayout(assocButtons);
+    assocBtnLayout->setContentsMargins(0, 0, 0, 0);
+    assocBtnLayout->setSpacing(8);
+
+    auto makeSmallBtn = [&](const QString &text) -> QPushButton* {
+        QPushButton *b = new QPushButton(text, assocButtons);
+        b->setStyleSheet(QString(R"(
+            QPushButton {
+                background-color: transparent;
+                border: 1px solid %1;
+                border-radius: 6px;
+                color: %2;
+                font-size: 12px;
+                padding: 5px 12px;
+            }
+            QPushButton:hover { background-color: %3; }
+        )").arg(c.border, c.textPrimary, c.hoverBg));
+        return b;
+    };
+
+    QPushButton *addBtn = makeSmallBtn(T("assoc_add"));
+    QPushButton *delBtn = makeSmallBtn(T("assoc_remove"));
+    assocBtnLayout->addWidget(addBtn);
+    assocBtnLayout->addWidget(delBtn);
+    assocBtnLayout->addStretch();
+
+    connect(addBtn, &QPushButton::clicked, this, [this, list] {
+        bool ok = false;
+        const QString ext = QInputDialog::getText(this, T("assoc_new_title"), T("assoc_ext_label"), QLineEdit::Normal, QStringLiteral("txt"), &ok);
+        if (!ok || ext.isEmpty()) return;
+        QString clean = ext.startsWith('.') ? ext.mid(1) : ext;
+        clean = clean.trimmed().toLower();
+        if (clean.isEmpty()) return;
+        const QString app = QFileDialog::getOpenFileName(this, T("assoc_pick_app"));
+        if (app.isEmpty()) return;
+        SettingsManager::setAssoc(clean, app);
+        // Duplikat entfernen
+        for (int r = 0; r < list->count(); ++r) {
+            if (list->item(r)->text().startsWith(QString(".%1 ").arg(clean))) {
+                delete list->takeItem(r);
+                break;
+            }
+        }
+        list->addItem(QString(".%1  →  %2").arg(clean, QFileInfo(app).fileName()));
+    });
+
+    connect(delBtn, &QPushButton::clicked, this, [this, list] {
+        QListWidgetItem *item = list->currentItem();
+        if (!item) return;
+        const QString text = item->text();
+        const QString ext = text.mid(1, text.indexOf(' ') - 1);
+        SettingsManager::removeAssoc(ext);
+        delete list->takeItem(list->row(item));
+    });
+
+    assocLayout->addWidget(list, 1);
+    assocLayout->addWidget(assocButtons);
+
+    QTabWidget *settingsTabs = new QTabWidget;
+    settingsTabs->setObjectName("settingsTabs");
+    settingsTabs->addTab(scroll, T("settings_section_general"));
+    settingsTabs->addTab(assocPage, T("settings_section_assoc"));
+    settingsTabs->setStyleSheet(QString(R"(
+        QTabWidget::pane {
+            background: transparent;
+            border: none;
+            border-top: 1px solid %1;
+            top: -1px;
+        }
+        QTabBar::tab {
+            background: transparent;
+            color: %2;
+            padding: 8px 16px;
+            border: none;
+            font-size: 12.5px;
+        }
+        QTabBar::tab:selected {
+            color: %3;
+            border-bottom: 2px solid %3;
+            font-weight: 600;
+        }
+        QTabBar::tab:hover { color: %3; }
+    )").arg(c.border, c.textSecondary, c.accent));
+    layout->addWidget(settingsTabs, 1);
 
     // ---- Footer mit Hinweis + Speichern ----
     QWidget *footer = new QWidget;
@@ -146,9 +289,6 @@ void SettingsDialog::buildUi() {
 
     QHBoxLayout *footerLayout = new QHBoxLayout(footer);
     footerLayout->setContentsMargins(20, 0, 20, 0);
-
-    QLabel *hint = new QLabel(T("settings_restart"));
-    hint->setStyleSheet(QString("color: %1; font-size: 11px; background: transparent;").arg(c.textSecondary));
 
     QPushButton *saveBtn = new QPushButton(T("settings_save"));
     saveBtn->setObjectName("primaryBtn");
@@ -170,22 +310,29 @@ void SettingsDialog::buildUi() {
 
     connect(saveBtn, &QPushButton::clicked, this, [this]() {
         // Sprache anwenden
-        if (selectedLang != I18n::language()) {
+        const bool langChanged = (selectedLang != I18n::language());
+        if (langChanged) {
             I18n::setLanguage(selectedLang);
             SettingsManager::setLanguage(selectedLang);
-            if (onLanguageChanged) onLanguageChanged(selectedLang);
         }
         // Allgemeine Optionen
         SettingsManager::setRestoreLastPath(chkRestore->isChecked());
         SettingsManager::setMouseSideNav(chkMouseNav->isChecked());
         SettingsManager::setConfirmDelete(chkConfirmDelete->isChecked());
         SettingsManager::setAnimations(chkAnimations->isChecked());
+        SettingsManager::setShowCmdBar(chkCmdBar->isChecked());
+        SettingsManager::setShowNavBar(chkNavBar->isChecked());
+        SettingsManager::setShowTabsBar(chkTabsBar->isChecked());
+        SettingsManager::setDeleteAfterAction(chkDeleteAfterAction->isChecked());
+        SettingsManager::setHideSearchBar(chkHideSearch->isChecked());
+        SettingsManager::setSizeUnits(unitsCombo->currentIndex());
         // Einstellungen speichern
         SettingsManager::save();
         accept();
+        // Sprache gewechselt → App automatisch schnell neu starten
+        if (langChanged) emit restartRequested();
     });
 
-    footerLayout->addWidget(hint);
     footerLayout->addStretch();
 
     QPushButton *cancelBtn = new QPushButton(T("settings_cancel"));
@@ -353,6 +500,11 @@ QWidget *SettingsDialog::makeGeneralSection() {
         { &chkMouseNav,     "settings_mouse_nav",      SettingsManager::getMouseSideNav()    },
         { &chkConfirmDelete,"settings_confirm_delete", SettingsManager::getConfirmDelete()    },
         { &chkAnimations,   "settings_animations",     SettingsManager::getAnimations()       },
+        { &chkCmdBar,       "settings_show_cmd",       SettingsManager::getShowCmdBar()       },
+        { &chkNavBar,       "settings_show_nav",       SettingsManager::getShowNavBar()       },
+        { &chkTabsBar,      "settings_show_tabs",      SettingsManager::getShowTabsBar()      },
+        { &chkDeleteAfterAction, "settings_delete_after_action", SettingsManager::getDeleteAfterAction() },
+        { &chkHideSearch,   "settings_hide_search",    SettingsManager::getHideSearchBar()    },
     };
     for (const OptCheck &o : opts) {
         *o.member = new QCheckBox(T(o.key), box);
@@ -360,6 +512,41 @@ QWidget *SettingsDialog::makeGeneralSection() {
         (*o.member)->setChecked(o.value);
         layout->addWidget(*o.member);
     }
+
+    // Größeneinheiten
+    QWidget *unitsRow = new QWidget(box);
+    unitsRow->setStyleSheet("background: transparent; border: none;");
+    QHBoxLayout *unitsLayout = new QHBoxLayout(unitsRow);
+    unitsLayout->setContentsMargins(0, 4, 0, 4);
+    unitsLayout->setSpacing(10);
+    QLabel *unitsLabel = new QLabel(T("settings_units"), unitsRow);
+    unitsLabel->setStyleSheet(QString("color: %1; font-size: 13px; background: transparent; border: none;").arg(c.textPrimary));
+    unitsCombo = new QComboBox(unitsRow);
+    unitsCombo->addItem(T("units_windows"));
+    unitsCombo->addItem(T("units_binary"));
+    unitsCombo->addItem(T("units_si"));
+    unitsCombo->setCurrentIndex(SettingsManager::getSizeUnits());
+    unitsCombo->setStyleSheet(QString(R"(
+        QComboBox {
+            background-color: %1;
+            border: 1px solid %2;
+            border-radius: 6px;
+            color: %3;
+            padding: 4px 8px;
+        }
+        QComboBox:hover { border-color: %4; }
+        QComboBox QAbstractItemView {
+            background-color: %1;
+            color: %3;
+            border: 1px solid %2;
+            selection-background-color: %5;
+        }
+    )").arg(c.surfaceBg, c.border, c.textPrimary, c.accent, c.selectedBg));
+    unitsCombo->setMinimumWidth(150);
+    unitsLayout->addWidget(unitsLabel);
+    unitsLayout->addWidget(unitsCombo);
+    unitsLayout->addStretch();
+    layout->addWidget(unitsRow);
 
     return box;
 }

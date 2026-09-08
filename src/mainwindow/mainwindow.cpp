@@ -9,6 +9,7 @@
 #include <QFileInfo>
 #include <QHeaderView>
 #include <QInputDialog>
+#include <QFileDialog>
 #include <QDesktopServices>
 #include <QStorageInfo>
 #include <QStatusBar>
@@ -30,6 +31,8 @@
 #include <QPropertyAnimation>
 #include <QEasingCurve>
 #include <QGraphicsOpacityEffect>
+#include <QPlainTextEdit>
+#include <QTextBlock>
 
 #include <QDialog>
 #include <QLabel>
@@ -75,6 +78,32 @@ public:
             option->displayAlignment = Qt::AlignRight | Qt::AlignVCenter;
             option->rect.adjust(0, 0, -10, 0);
         }
+    }
+};
+
+// Linksbündige Anzeige für die Spalte "Größe"
+class SizeColumnDelegate : public QStyledItemDelegate {
+public:
+    explicit SizeColumnDelegate(QObject *parent) : QStyledItemDelegate(parent) {}
+    void initStyleOption(QStyleOptionViewItem *option, const QModelIndex &index) const override {
+        QStyledItemDelegate::initStyleOption(option, index);
+        if (index.column() == 1) {
+            option->displayAlignment = Qt::AlignLeft | Qt::AlignVCenter;
+            option->rect.adjust(10, 0, 0, 0);
+        }
+    }
+};
+
+// Versteckte Dateien grau einfärben, sobald sie angezeigt werden
+class HiddenStyleDelegate : public QStyledItemDelegate {
+public:
+    explicit HiddenStyleDelegate(QObject *parent) : QStyledItemDelegate(parent) {}
+    void initStyleOption(QStyleOptionViewItem *option, const QModelIndex &index) const override {
+        QStyledItemDelegate::initStyleOption(option, index);
+        if (index.column() != 0) return;
+        const auto *m = qobject_cast<const QFileSystemModel *>(index.model());
+        if (m && m->fileName(index).startsWith('.'))
+            option->palette.setColor(QPalette::Text, QColor(AppStyle::colors().textSecondary));
     }
 };
 
@@ -184,10 +213,16 @@ static QIcon colorizeIcon(const QString &path, const QColor &color) {
 // Hilfsfunktion: Dateigröße menschenlesbar formatieren
 // ---------------------------------------------------------------------------
 static QString formatSize(qint64 bytes) {
-    const double kb = 1024.0, mb = kb * 1024.0, gb = mb * 1024.0;
-    if (bytes >= gb) return QString::number(bytes / gb, 'f', 2) + " GB";
-    if (bytes >= mb) return QString::number(bytes / mb, 'f', 2) + " MB";
-    if (bytes >= kb) return QString::number(bytes / kb, 'f', 1) + " KB";
+    const int unit = SettingsManager::getSizeUnits();
+    const double base = (unit == 2) ? 1000.0 : 1024.0;
+    const double mb0 = base * base, gb0 = mb0 * base;
+    QString kbS, mbS, gbS;
+    if (unit == 0)      { kbS = " KB"; mbS = " MB"; gbS = " GB"; }
+    else if (unit == 1) { kbS = " KiB"; mbS = " MiB"; gbS = " GiB"; }
+    else                { kbS = " kB"; mbS = " MB"; gbS = " GB"; }
+    if (bytes >= gb0) return QString::number(bytes / gb0, 'f', 2) + gbS;
+    if (bytes >= mb0) return QString::number(bytes / mb0, 'f', 2) + mbS;
+    if (bytes >= base) return QString::number(bytes / base, 'f', 1) + kbS;
     return QString::number(bytes) + " Bytes";
 }
 
@@ -381,6 +416,665 @@ public:
 };
 
 // ---------------------------------------------------------------------------
+// ModernInputDialog - minimale, moderne Eingabebox (ersetzt QInputDialog)
+// ---------------------------------------------------------------------------
+class ModernInputDialog : public QDialog {
+public:
+    ModernInputDialog(const QString &title, const QString &label, QWidget *parent = nullptr)
+        : QDialog(parent), input(nullptr) {
+
+        const ThemeColors &c = AppStyle::colors();
+
+        setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
+        setAttribute(Qt::WA_TranslucentBackground);
+        setFixedSize(420, 230);
+
+        QWidget *container = new QWidget(this);
+        container->setObjectName("inputContainer");
+        container->setStyleSheet(QString(R"(
+            QWidget#inputContainer {
+                background-color: %1;
+                border: 1px solid %2;
+                border-radius: 10px;
+            }
+            QLabel#inputTitle {
+                color: %3;
+                font-size: 15px;
+                font-weight: 700;
+                background: transparent;
+                border: none;
+            }
+            QLabel#inputLabel {
+                color: %4;
+                font-size: 12.5px;
+                background: transparent;
+                border: none;
+            }
+        )").arg(c.elevatedBg, c.border, c.textPrimary, c.textSecondary));
+
+        QVBoxLayout *mainLayout = new QVBoxLayout(this);
+        mainLayout->setContentsMargins(18, 18, 18, 18);
+        mainLayout->addWidget(container);
+
+        QVBoxLayout *inner = new QVBoxLayout(container);
+        inner->setContentsMargins(22, 20, 22, 18);
+        inner->setSpacing(10);
+
+        QLabel *titleLabel = new QLabel(title);
+        titleLabel->setObjectName("inputTitle");
+        inner->addWidget(titleLabel);
+
+        QLabel *labelLabel = new QLabel(label);
+        labelLabel->setObjectName("inputLabel");
+        inner->addWidget(labelLabel);
+
+        input = new QLineEdit;
+        input->setFixedHeight(36);
+        input->setObjectName("modernInput");
+        input->setStyleSheet(QString(R"(
+            QLineEdit#modernInput {
+                background-color: %1;
+                border: 1px solid %2;
+                border-radius: 6px;
+                padding: 0 10px;
+                color: %3;
+                font-size: 13px;
+            }
+            QLineEdit#modernInput:focus { border: 1px solid %4; }
+        )").arg(c.chromeBg, c.border, c.textPrimary, c.accent));
+        inner->addWidget(input);
+
+        inner->addStretch();
+
+        QHBoxLayout *btns = new QHBoxLayout;
+        QPushButton *cancel = new QPushButton(T("cancel"));
+        QPushButton *okBtn = new QPushButton(T("ok"));
+        okBtn->setObjectName("primaryBtn");
+        btns->addStretch();
+        btns->addWidget(cancel);
+        btns->addWidget(okBtn);
+        inner->addLayout(btns);
+
+        connect(cancel, &QPushButton::clicked, this, &QDialog::reject);
+        connect(okBtn, &QPushButton::clicked, this, [this] {
+            if (!input->text().trimmed().isEmpty()) accept();
+        });
+        connect(input, &QLineEdit::returnPressed, okBtn, &QPushButton::click);
+
+        QGraphicsDropShadowEffect *shadow = new QGraphicsDropShadowEffect(this);
+        shadow->setBlurRadius(28);
+        shadow->setColor(QColor(0, 0, 0, 90));
+        shadow->setOffset(0, 6);
+        container->setGraphicsEffect(shadow);
+
+        setModal(true);
+    }
+
+    void setText(const QString &t) {
+        input->setText(t);
+        const int dot = t.lastIndexOf(QChar('.'));
+        if (dot >= 0) input->setSelection(0, dot);
+        else input->selectAll();
+    }
+
+    QString text() const { return input->text().trimmed(); }
+    QLineEdit *input = nullptr;
+};
+
+static QString getModernText(QWidget *parent, const QString &title, const QString &label,
+                             const QString &initial = QString(), bool *okPtr = nullptr) {
+    ModernInputDialog dlg(title, label, parent);
+    if (!initial.isEmpty()) dlg.setText(initial);
+    const bool ok = (dlg.exec() == QDialog::Accepted);
+    if (okPtr) *okPtr = ok;
+    if (ok) return dlg.text();
+    return QString();
+}
+
+// ---------------------------------------------------------------------------
+// NewFileDialog - großes, modernes Fenster zum Erstellen neuer Dateien
+// ---------------------------------------------------------------------------
+class NewFileDialog : public QDialog {
+public:
+    explicit NewFileDialog(QWidget *parent = nullptr) : QDialog(parent), selectedExt("txt") {
+        const ThemeColors &c = AppStyle::colors();
+
+        setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
+        setAttribute(Qt::WA_TranslucentBackground);
+        setFixedSize(720, 640);
+
+        // Äußeres transparentes Layout für Schatten
+        QVBoxLayout *outer = new QVBoxLayout(this);
+        outer->setContentsMargins(16, 16, 16, 16);
+
+        QWidget *container = new QWidget;
+        container->setObjectName("newFileContainer");
+        container->setStyleSheet(QString(R"(
+            QWidget#newFileContainer {
+                background-color: %1;
+                border: 1px solid %2;
+                border-radius: 12px;
+            }
+        )").arg(c.elevatedBg, c.border));
+
+        QGraphicsDropShadowEffect *shadow = new QGraphicsDropShadowEffect(this);
+        shadow->setBlurRadius(42);
+        shadow->setColor(QColor(0, 0, 0, 120));
+        shadow->setOffset(0, 8);
+        container->setGraphicsEffect(shadow);
+
+        outer->addWidget(container);
+
+        QVBoxLayout *layout = new QVBoxLayout(container);
+        layout->setContentsMargins(0, 0, 0, 0);
+        layout->setSpacing(0);
+
+        // Titelleiste
+        QWidget *titleBar = new QWidget;
+        titleBar->setStyleSheet(QString("background-color: %1; border-radius: 12px 12px 0 0; border-bottom: 1px solid %2;")
+                                .arg(c.chromeBg, c.border));
+        titleBar->setFixedHeight(52);
+        QHBoxLayout *titleLayout = new QHBoxLayout(titleBar);
+        titleLayout->setContentsMargins(20, 0, 16, 0);
+        QLabel *titleText = new QLabel(T("new_file_big_title"));
+        titleText->setStyleSheet(QString("color: %1; font-size: 15px; font-weight: 700; background: transparent;").arg(c.textPrimary));
+        QPushButton *closeBtn = new QPushButton("✕");
+        closeBtn->setFixedSize(30, 30);
+        closeBtn->setStyleSheet(QString(R"(
+            QPushButton { background: transparent; border: none; border-radius: 6px; color: %1; font-size: 13px; }
+            QPushButton:hover { background-color: %2; }
+        )").arg(c.textSecondary, c.danger));
+        connect(closeBtn, &QPushButton::clicked, this, &QDialog::reject);
+        titleLayout->addWidget(titleText);
+        titleLayout->addStretch();
+        titleLayout->addWidget(closeBtn);
+        layout->addWidget(titleBar);
+
+        // Suchfeld
+        QWidget *searchRow = new QWidget;
+        searchRow->setStyleSheet("background: transparent;");
+        QHBoxLayout *searchLayout = new QHBoxLayout(searchRow);
+        searchLayout->setContentsMargins(20, 12, 20, 4);
+        QLineEdit *search = new QLineEdit;
+        search->setPlaceholderText(T("new_file_search"));
+        search->setClearButtonEnabled(true);
+        search->setFixedHeight(36);
+        search->setObjectName("newFileSearch");
+        search->setStyleSheet(QString(R"(
+            QLineEdit#newFileSearch {
+                background-color: %1;
+                border: 1px solid %2;
+                border-radius: 8px;
+                padding: 0 12px;
+                color: %3;
+                font-size: 13px;
+            }
+            QLineEdit#newFileSearch:focus { border: 1px solid %4; }
+        )").arg(c.chromeBg, c.border, c.textPrimary, c.accent));
+        QAction *searchIcon = new QAction(QIcon(":/icons/search.ico"), "", search);
+        search->addAction(searchIcon, QLineEdit::LeadingPosition);
+        searchLayout->addWidget(search);
+        layout->addWidget(searchRow);
+
+        // Raster mit Vorlagen
+        QWidget *gridHost = new QWidget;
+        gridHost->setStyleSheet("background: transparent;");
+        QGridLayout *grid = new QGridLayout(gridHost);
+        grid->setContentsMargins(20, 8, 20, 8);
+        grid->setSpacing(10);
+        grid->setAlignment(Qt::AlignTop | Qt::AlignLeft);
+
+        int row = 0, col = 0;
+        for (const TypeInfo &t : types()) {
+            QToolButton *btn = new QToolButton;
+            btn->setObjectName("typeTile");
+            btn->setText(t.name);
+            btn->setIcon(fileTypeIcon(t.shortLabel, t.color));
+            btn->setIconSize(QSize(44, 44));
+            btn->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
+            btn->setFixedSize(108, 84);
+            btn->setAutoRaise(false);
+            btn->setProperty("ext", t.ext);
+            btn->setCursor(Qt::PointingHandCursor);
+            btn->setStyleSheet(QString(R"(
+                QToolButton#typeTile {
+                    background: transparent;
+                    border: 1px solid transparent;
+                    border-radius: 10px;
+                    color: %1;
+                    font-size: 11.5px;
+                    padding: 6px 4px;
+                }
+                QToolButton#typeTile:hover { background-color: %2; border-color: %3; }
+            )").arg(c.textPrimary, c.hoverBg, c.border));
+            connect(btn, &QToolButton::clicked, this, [this, btn] { selectType(btn); });
+
+            grid->addWidget(btn, row, col);
+            col++;
+            if (col >= 5) { col = 0; row++; }
+        }
+
+        QScrollArea *scroll = new QScrollArea;
+        scroll->setWidget(gridHost);
+        scroll->setWidgetResizable(true);
+        scroll->setFrameShape(QFrame::NoFrame);
+        scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        scroll->setStyleSheet(QString("QScrollArea { background: transparent; border: none; }"
+                                      "QScrollArea > QWidget > QWidget { background: transparent; }"));
+        allTiles = gridHost->findChildren<QToolButton *>();
+        layout->addWidget(scroll, 1);
+
+        // Suchfilter
+        connect(search, &QLineEdit::textChanged, this, [this](const QString &text) {
+            for (QToolButton *b : allTiles) {
+                const bool show = text.isEmpty() || b->text().contains(text, Qt::CaseInsensitive)
+                                 || b->property("ext").toString().contains(text, Qt::CaseInsensitive);
+                b->setVisible(show);
+            }
+        });
+
+        // Footer mit Dateiname und Aktionsbuttons
+        QWidget *footer = new QWidget;
+        footer->setStyleSheet(QString("background-color: %1; border-radius: 0 0 12px 12px; border-top: 1px solid %2;")
+                              .arg(c.chromeBg, c.border));
+        footer->setFixedHeight(82);
+        QVBoxLayout *footerLayout = new QVBoxLayout(footer);
+        footerLayout->setContentsMargins(20, 10, 20, 10);
+        footerLayout->setSpacing(6);
+
+        QHBoxLayout *nameRow = new QHBoxLayout;
+        nameRow->setSpacing(10);
+        QLabel *nameLabel = new QLabel(T("new_file_name_label"));
+        nameLabel->setStyleSheet(QString("color: %1; font-size: 12.5px; font-weight: 600; background: transparent;").arg(c.textSecondary));
+        nameEdit = new QLineEdit;
+        nameEdit->setFixedHeight(34);
+        nameEdit->setStyleSheet(QString(R"(
+            QLineEdit { background-color: %1; border: 1px solid %2; border-radius: 6px; padding: 0 10px; color: %3; font-size: 13px; }
+            QLineEdit:focus { border: 1px solid %4; }
+        )").arg(c.elevatedBg, c.border, c.textPrimary, c.accent));
+        nameEdit->setText(T("new_file_default_name"));
+        nameRow->addWidget(nameLabel);
+        nameRow->addWidget(nameEdit, 1);
+        footerLayout->addLayout(nameRow);
+
+        QHBoxLayout *btnRow = new QHBoxLayout;
+        btnRow->setSpacing(10);
+        QPushButton *cancel = new QPushButton(T("cancel"));
+        cancel->setFixedHeight(34);
+        cancel->setFixedWidth(100);
+        QPushButton *create = new QPushButton(T("new_file_create"));
+        create->setObjectName("primaryBtn");
+        create->setFixedHeight(34);
+        create->setFixedWidth(120);
+        btnRow->addStretch();
+        btnRow->addWidget(cancel);
+        btnRow->addWidget(create);
+        footerLayout->addLayout(btnRow);
+
+        connect(cancel, &QPushButton::clicked, this, &QDialog::reject);
+        connect(create, &QPushButton::clicked, this, &QDialog::accept);
+        connect(nameEdit, &QLineEdit::returnPressed, create, &QPushButton::click);
+        layout->addWidget(footer);
+    }
+
+    QString fileName() const {
+        QString n = nameEdit->text().trimmed();
+        if (n.isEmpty()) return QString();
+        if (QFileInfo(n).suffix().isEmpty()) return n + "." + selectedExt;
+        return n;
+    }
+
+private:
+    struct TypeInfo {
+        const char *name;
+        const char *ext;
+        const char *shortLabel;
+        QColor color;
+    };
+
+    static QVector<TypeInfo> types() {
+        const QColor gray("#7a869a"), blue("#4a90d9"), indigo("#5b6ad0"), green("#3fa66a"),
+                     red("#d9564f"), purple("#9b59b6"), orange("#e08a3c"), yellow("#d9a62e"),
+                     cyan("#2fb6bf"), pink("#d9637a"), teal("#2c9d8f");
+        return {
+            {"Text",           "txt",   "TXT", gray},
+            {"Rich Text",      "rtf",   "RTF", gray},
+            {"Markdown",       "md",    "MD",  gray},
+            {"LaTeX",          "tex",   "TeX", gray},
+            {"HTML",           "html",  "HTML", orange},
+            {"CSS",            "css",   "CSS", blue},
+            {"JavaScript",     "js",    "JS",  yellow},
+            {"TypeScript",     "ts",    "TS",  blue},
+            {"PHP",            "php",   "PHP", indigo},
+            {"Python",         "py",    "PY",  blue},
+            {"Ruby",           "rb",    "RUBY", red},
+            {"Go",             "go",    "GO",  cyan},
+            {"Rust",           "rs",    "RS",  orange},
+            {"C",              "c",     "C",   blue},
+            {"C++",            "cpp",   "C++", blue},
+            {"Header",         "h",     "H",   gray},
+            {"C#",             "cs",    "C#",  purple},
+            {"Java",           "java",  "JAVA", orange},
+            {"Kotlin",         "kt",    "KT",  purple},
+            {"Swift",          "swift", "SWIFT", orange},
+            {"Shell",          "sh",    "SH",  green},
+            {"Batch",          "bat",   "BAT", gray},
+            {"PowerShell",     "ps1",   "PS1", blue},
+            {"SQL",            "sql",   "SQL", yellow},
+            {"JSON",           "json",  "{}",  yellow},
+            {"XML",            "xml",   "XML", blue},
+            {"YAML",           "yaml",  "YAML", red},
+            {"TOML",           "toml",  "TOML", gray},
+            {"CSV",            "csv",   "CSV", green},
+            {"INI",            "ini",   "INI", gray},
+            {"PDF",            "pdf",   "PDF", red},
+            {"Word",           "docx",  "DOCX", blue},
+            {"Excel",          "xlsx",  "XLSX", green},
+            {"PowerPoint",     "pptx",  "PPTX", orange},
+            {"PNG",            "png",   "PNG", purple},
+            {"JPG",            "jpg",   "JPG", purple},
+            {"SVG",            "svg",   "SVG", orange},
+            {"GIF",            "gif",   "GIF", pink},
+            {"ICO",            "ico",   "ICO", gray},
+            {"WebP",           "webp",  "WEBP", teal},
+            {"MP3",            "mp3",   "MP3", pink},
+            {"WAV",            "wav",   "WAV", cyan},
+            {"FLAC",           "flac",  "FLAC", teal},
+            {"OGG",            "ogg",   "OGG", purple},
+            {"MP4",            "mp4",   "MP4", red},
+            {"MKV",            "mkv",   "MKV", gray},
+            {"AVI",            "avi",   "AVI", red},
+            {"MOV",            "mov",   "MOV", teal},
+            {"ZIP",            "zip",   "ZIP", yellow},
+            {"7-Zip",          "7z",    "7Z",  gray},
+            {"TAR",            "tar",   "TAR", gray},
+        };
+    }
+
+    static QIcon fileTypeIcon(const QString &label, const QColor &color) {
+        QPixmap pm(48, 48);
+        pm.fill(Qt::transparent);
+        QPainter p(&pm);
+        p.setRenderHint(QPainter::Antialiasing);
+        p.setPen(Qt::NoPen);
+        p.setBrush(color.darker(115));
+        p.drawRoundedRect(QRectF(7, 7, 34, 34), 8, 8);
+        p.setBrush(color);
+        p.drawRoundedRect(QRectF(4, 4, 34, 34), 8, 8);
+        p.setPen(QColor(255, 255, 255));
+        QFont f = p.font();
+        f.setBold(true);
+        f.setPixelSize(label.size() > 3 ? 13 : 16);
+        p.setFont(f);
+        QRectF textRect(4, 4, 34, 34);
+        p.drawText(textRect, Qt::AlignCenter, label);
+        p.end();
+        return QIcon(pm);
+    }
+
+    void selectType(QToolButton *btn) {
+        selectedExt = btn->property("ext").toString();
+        const ThemeColors &c = AppStyle::colors();
+        for (QToolButton *b : allTiles) {
+            b->setStyleSheet(QString(R"(
+                QToolButton#typeTile {
+                    background: transparent;
+                    border: 1px solid transparent;
+                    border-radius: 10px;
+                    color: %1;
+                    font-size: 11.5px;
+                    padding: 6px 4px;
+                }
+                QToolButton#typeTile:hover { background-color: %2; border-color: %3; }
+            )").arg(c.textPrimary, c.hoverBg, c.border));
+        }
+        btn->setStyleSheet(QString(R"(
+            QToolButton#typeTile {
+                background-color: %1;
+                border: 1px solid %2;
+                border-radius: 10px;
+                color: %3;
+                font-size: 11.5px;
+                font-weight: 600;
+                padding: 6px 4px;
+            }
+            QToolButton#typeTile:hover { background-color: %1; border-color: %2; }
+        )").arg(AppStyle::colors().selectedBg, AppStyle::colors().selectedBorder, c.textPrimary));
+        QString n = nameEdit->text();
+        const int dot = n.lastIndexOf(QChar('.'));
+        if (dot >= 0) n = n.left(dot);
+        nameEdit->setText(n + "." + selectedExt);
+        nameEdit->setFocus();
+        nameEdit->selectAll();
+    }
+
+    QLineEdit *nameEdit = nullptr;
+    QList<QToolButton *> allTiles;
+    QString selectedExt;
+};
+
+// ---------------------------------------------------------------------------
+// TextViewerDialog - moderner Text-Viewer mit Zeilennummern
+// ---------------------------------------------------------------------------
+class CodeEditor : public QPlainTextEdit {
+    Q_OBJECT
+public:
+    explicit CodeEditor(QWidget *parent = nullptr) : QPlainTextEdit(parent) {
+        lineArea = new LineNumberArea(this);
+        connect(this, &QPlainTextEdit::blockCountChanged, this, &CodeEditor::updateLineAreaWidth);
+        connect(this, &QPlainTextEdit::updateRequest, this, &CodeEditor::updateLineArea);
+        connect(this, &QPlainTextEdit::cursorPositionChanged, this, &CodeEditor::updateCursorLine);
+        updateLineAreaWidth(0);
+        highlightCurrentLine();
+    }
+
+    void lineNumberAreaPaintEvent(QPaintEvent *event) {
+        const ThemeColors &c = AppStyle::colors();
+        QPainter painter(lineArea);
+        painter.fillRect(event->rect(), QColor(c.chromeBg));
+        QTextBlock block = firstVisibleBlock();
+        int blockNumber = block.blockNumber();
+        int top = qRound(blockBoundingGeometry(block).translated(contentOffset()).top());
+        int bottom = top + qRound(blockBoundingRect(block).height());
+        painter.setPen(QColor(c.textSecondary));
+        QFont f = font();
+        f.setPixelSize(11);
+        painter.setFont(f);
+        while (block.isValid() && top <= event->rect().bottom()) {
+            if (block.isVisible() && bottom >= event->rect().top()) {
+                const QString num = QString::number(blockNumber + 1);
+                painter.drawText(0, top, lineArea->width() - 8, fontMetrics().height(),
+                                 Qt::AlignRight, num);
+            }
+            block = block.next();
+            top = bottom;
+            bottom = top + qRound(blockBoundingRect(block).height());
+            ++blockNumber;
+        }
+    }
+
+    int lineNumberAreaWidth() const {
+        const int digits = QString::number(std::max(1, blockCount())).length();
+        return 16 + fontMetrics().horizontalAdvance(QLatin1Char('9')) * digits;
+    }
+
+private:
+    class LineNumberArea : public QWidget {
+    public:
+        explicit LineNumberArea(CodeEditor *editor) : QWidget(editor), editor(editor) {}
+        QSize sizeHint() const override { return QSize(editor->lineNumberAreaWidth(), 0); }
+    protected:
+        void paintEvent(QPaintEvent *event) override { editor->lineNumberAreaPaintEvent(event); }
+    private:
+        CodeEditor *editor;
+    };
+
+    void updateLineAreaWidth(int) {
+        setViewportMargins(lineNumberAreaWidth(), 0, 0, 0);
+    }
+
+    void updateLineArea(const QRect &rect, int dy) {
+        if (dy) lineArea->scroll(0, dy);
+        else lineArea->update(0, rect.y(), lineArea->width(), rect.height());
+        if (rect.contains(viewport()->rect())) updateLineAreaWidth(0);
+    }
+
+    void updateCursorLine() {
+        QList<QTextEdit::ExtraSelection> extra;
+        if (!isReadOnly()) {
+            QTextEdit::ExtraSelection sel;
+            sel.format.setBackground(QColor(255, 255, 255, 12));
+            sel.format.setProperty(QTextFormat::FullWidthSelection, true);
+            sel.cursor = textCursor();
+            sel.cursor.clearSelection();
+            extra.append(sel);
+        }
+        setExtraSelections(extra);
+    }
+
+    void highlightCurrentLine() {}
+
+    void resizeEvent(QResizeEvent *event) override {
+        QPlainTextEdit::resizeEvent(event);
+        const QRect cr = contentsRect();
+        lineArea->setGeometry(QRect(cr.left(), cr.top(), lineNumberAreaWidth(), cr.height()));
+    }
+
+    LineNumberArea *lineArea;
+};
+
+class TextViewerDialog : public QDialog {
+public:
+    explicit TextViewerDialog(const QString &filePath, QWidget *parent = nullptr)
+        : QDialog(parent), filePath(filePath) {
+        const ThemeColors &c = AppStyle::colors();
+
+        setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
+        setAttribute(Qt::WA_TranslucentBackground);
+        resize(780, 580);
+
+        QVBoxLayout *outer = new QVBoxLayout(this);
+        outer->setContentsMargins(16, 16, 16, 16);
+
+        QWidget *container = new QWidget;
+        container->setObjectName("viewerContainer");
+        container->setStyleSheet(QString(R"(
+            QWidget#viewerContainer {
+                background-color: %1;
+                border: 1px solid %2;
+                border-radius: 12px;
+            }
+        )").arg(c.elevatedBg, c.border));
+
+        QGraphicsDropShadowEffect *shadow = new QGraphicsDropShadowEffect(this);
+        shadow->setBlurRadius(42);
+        shadow->setColor(QColor(0, 0, 0, 120));
+        shadow->setOffset(0, 8);
+        container->setGraphicsEffect(shadow);
+
+        outer->addWidget(container);
+
+        QVBoxLayout *layout = new QVBoxLayout(container);
+        layout->setContentsMargins(0, 0, 0, 0);
+        layout->setSpacing(0);
+
+        QWidget *titleBar = new QWidget;
+        titleBar->setStyleSheet(QString("background-color: %1; border-radius: 12px 12px 0 0; border-bottom: 1px solid %2;")
+                                .arg(c.chromeBg, c.border));
+        titleBar->setFixedHeight(52);
+        QHBoxLayout *titleLayout = new QHBoxLayout(titleBar);
+        titleLayout->setContentsMargins(20, 0, 16, 0);
+        QLabel *titleText = new QLabel(QFileInfo(filePath).fileName());
+        titleText->setStyleSheet(QString("color: %1; font-size: 15px; font-weight: 700; background: transparent;").arg(c.textPrimary));
+        titleLayout->addWidget(titleText);
+        titleLayout->addStretch();
+        QPushButton *copyBtn = new QPushButton(T("viewer_copy"));
+        copyBtn->setCursor(Qt::PointingHandCursor);
+        copyBtn->setStyleSheet(QString(R"(
+            QPushButton { background-color: transparent; border: 1px solid %1; border-radius: 6px; color: %2; font-size: 12px; padding: 5px 12px; }
+            QPushButton:hover { background-color: %3; }
+        )").arg(c.border, c.textPrimary, c.hoverBg));
+        connect(copyBtn, &QPushButton::clicked, this, [this] {
+            if (editor) QApplication::clipboard()->setText(editor->toPlainText());
+        });
+        QPushButton *closeBtn = new QPushButton("✕");
+        closeBtn->setFixedSize(30, 30);
+        closeBtn->setStyleSheet(QString(R"(
+            QPushButton { background: transparent; border: none; border-radius: 6px; color: %1; font-size: 13px; }
+            QPushButton:hover { background-color: %2; }
+        )").arg(c.textSecondary, c.danger));
+        connect(closeBtn, &QPushButton::clicked, this, &QDialog::reject);
+        titleLayout->addWidget(copyBtn);
+        titleLayout->addWidget(closeBtn);
+        layout->addWidget(titleBar);
+
+        QWidget *body = new QWidget;
+        body->setStyleSheet("background: transparent;");
+        QHBoxLayout *bodyLayout = new QHBoxLayout(body);
+        bodyLayout->setContentsMargins(0, 12, 0, 0);
+
+        editor = new CodeEditor;
+        editor->setReadOnly(true);
+        editor->setFrameShape(QFrame::NoFrame);
+        editor->setLineWrapMode(QPlainTextEdit::NoWrap);
+        editor->setFont(QFont(QStringLiteral("Noto Sans Mono"), 11));
+        editor->setStyleSheet(QString(R"(
+            QPlainTextEdit {
+                background-color: %1;
+                color: %2;
+                border: none;
+                selection-background-color: %3;
+                selection-color: %4;
+            }
+        )").arg(c.surfaceBg, c.textPrimary, c.selectedBg, c.textPrimary));
+
+        QFile f(filePath);
+        if (f.open(QIODevice::ReadOnly)) {
+            editor->setPlainText(QString::fromUtf8(f.readAll()));
+            editor->moveCursor(QTextCursor::Start);
+        }
+
+        bodyLayout->addWidget(editor, 1);
+        layout->addWidget(body, 1);
+
+        QWidget *footer = new QWidget;
+        footer->setStyleSheet(QString("background-color: %1; border-radius: 0 0 12px 12px; border-top: 1px solid %2;")
+                              .arg(c.chromeBg, c.border));
+        footer->setFixedHeight(44);
+        QHBoxLayout *footerLayout = new QHBoxLayout(footer);
+        footerLayout->setContentsMargins(20, 0, 20, 0);
+        QLabel *status = new QLabel(T("viewer_lines")
+            .arg(QString::number(editor->blockCount()))
+            .arg(formatSize(QFileInfo(filePath).size())));
+        status->setStyleSheet(QString("color: %1; font-size: 12px; background: transparent;").arg(c.textSecondary));
+        footerLayout->addWidget(status);
+        footerLayout->addStretch();
+        layout->addWidget(footer);
+    }
+
+private:
+    QString filePath;
+    CodeEditor *editor = nullptr;
+};
+
+static bool isTextViewerType(const QFileInfo &info) {
+    static const QStringList textExts = {
+        "txt","md","rtf","tex","log","ini","cfg","conf","lst","csv",
+        "json","xml","yaml","yml","toml","tsv",
+        "html","htm","css","js","mjs","ts","jsx","tsx",
+        "php","py","rb","pl","go","rs","sh","bash","zsh",
+        "c","cpp","h","hpp","cc","cxx","cs","java","kt","swift",
+        "sql","cmake","mk","makefile","qss","ui","svelte","vue",
+        "bat","ps1","env","gitignore","gradle","properties","diff"
+    };
+    const QString ext = info.suffix().toLower();
+    if (textExts.contains(ext)) return true;
+    return info.fileName().toLower() == "makefile"
+        || info.fileName().toLower() == "dockerfile"
+        || info.fileName().toLower() == ".gitignore";
+}
+
+// ---------------------------------------------------------------------------
 // MainWindow
 // ---------------------------------------------------------------------------
 MainWindow::MainWindow(QWidget *parent)
@@ -467,7 +1161,7 @@ void MainWindow::showEvent(QShowEvent *event) {
 }
 
 void MainWindow::applyTheme() {
-    // set qapp stylesheet to dark!
+    AppStyle::applyPalette();
     qApp->setStyleSheet(AppStyle::globalStyleSheet());
 }
 
@@ -475,7 +1169,7 @@ void MainWindow::setupRibbon() {
     const ThemeColors &c = AppStyle::colors();
     QColor iconColor(c.textPrimary);
 
-    QToolBar *navToolbar = addToolBar("Navigation");
+    navToolbar = addToolBar("Navigation");
     navToolbar->setMovable(false);
     navToolbar->setFloatable(false);
     navToolbar->setIconSize(QSize(16, 16));
@@ -514,7 +1208,7 @@ void MainWindow::setupRibbon() {
     closeTabAction = navToolbar->addAction(colorizeIcon(":/icons/delete.svg", iconColor), T("close_tab"));
     closeTabAction->setToolTip(T("close_tab_tt"));
 
-    QToolBar *cmdToolbar = addToolBar("Befehle");
+    cmdToolbar = addToolBar("Befehle");
     cmdToolbar->setMovable(false);
     cmdToolbar->setFloatable(false);
     cmdToolbar->setIconSize(QSize(16, 16));
@@ -591,6 +1285,25 @@ void MainWindow::setupRibbon() {
     new QShortcut(QKeySequence("Alt+Left"), this, this, &MainWindow::onBackClicked);
     new QShortcut(QKeySequence("Alt+Right"), this, this, &MainWindow::onForwardClicked);
     new QShortcut(QKeySequence("Alt+Up"), this, this, &MainWindow::onUpClicked);
+    new QShortcut(QKeySequence("Ctrl+L"), this, this, &MainWindow::startPathEdit);
+
+    // Suchleiste: optional ausgeblendet, mit Strg+F einblenden
+    searchBar->setVisible(!SettingsManager::getHideSearchBar());
+    new QShortcut(QKeySequence::Find, this, [this]() {
+        if (searchBar) {
+            searchBar->setVisible(true);
+            searchBar->setFocus();
+            searchBar->selectAll();
+        }
+    });
+
+    // Toolbar-Sichtbarkeit aus den Einstellungen übernehmen; das
+    // eingebaute Toolbar-Kontextmenü wird entfernt, da diese Steuerung
+    // bewusst über die Einstellungen läuft.
+    navToolbar->setContextMenuPolicy(Qt::PreventContextMenu);
+    cmdToolbar->setContextMenuPolicy(Qt::PreventContextMenu);
+    navToolbar->setVisible(SettingsManager::getShowNavBar());
+    cmdToolbar->setVisible(SettingsManager::getShowCmdBar());
 }
 
 void MainWindow::setupLayout() {
@@ -598,9 +1311,22 @@ void MainWindow::setupLayout() {
     model->setIconProvider(&iconProvider);
     model->setRootPath("/");
     showHidden = SettingsManager::getShowHidden();
-    QDir::Filters f = QDir::AllEntries | QDir::NoDotAndDotDot;
-    if (showHidden) f |= QDir::Hidden;
-    model->setFilter(f);
+    // Hidden immer im Filter lassen: Nur so bleiben auch Pfade durch
+    // versteckte Zwischenordner (z.B. ~/.local für den Papierkorb) über
+    // model->index() auflösbar. Die Sichtbarkeit versteckter Einträge wird
+    // danach in den Ansichten per setRowHidden gesteuert.
+    model->setFilter(QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden);
+
+    // Neu geladene Einträge sofort ausblenden, wenn versteckte Dateien
+    // nicht angezeigt werden sollen.
+    connect(model, &QFileSystemModel::rowsInserted, this,
+            [this](const QModelIndex &parent, int, int) {
+        if (showHidden || !tabs) return;
+        const auto views = tabs->findChildren<QTreeView *>();
+        for (QTreeView *tv : views) {
+            if (tv->rootIndex() == parent) applyHiddenPolicyToView(tv);
+        }
+    });
 
     sideModel = new QStandardItemModel(this);
 
@@ -765,13 +1491,15 @@ void MainWindow::setupTopTabBar() {
     addBtn->setToolTip("Neuer Tab (Strg+T)");
     connect(addBtn, &QToolButton::clicked, this, [this] { openNewTab(QDir::homePath()); });
 
-    QToolBar *tabBarHost = new QToolBar("Tabs");
-    tabBarHost->setObjectName("tabBarToolbar");
-    tabBarHost->setMovable(false);
-    tabBarHost->setFloatable(false);
-    tabBarHost->addWidget(topTabBarHost);
-    addToolBar(Qt::TopToolBarArea, tabBarHost);
-    insertToolBarBreak(tabBarHost);
+    tabBarToolbar = new QToolBar("Tabs");
+    tabBarToolbar->setObjectName("tabBarToolbar");
+    tabBarToolbar->setMovable(false);
+    tabBarToolbar->setFloatable(false);
+    tabBarToolbar->setContextMenuPolicy(Qt::PreventContextMenu);
+    tabBarToolbar->addWidget(topTabBarHost);
+    addToolBar(Qt::TopToolBarArea, tabBarToolbar);
+    insertToolBarBreak(tabBarToolbar);
+    tabBarToolbar->setVisible(SettingsManager::getShowTabsBar());
 
     topTabAddButton = addBtn;
     refreshTopTabBar();
@@ -845,8 +1573,61 @@ void MainWindow::onSidebarClicked(const QModelIndex &index) {
 
 void MainWindow::onFileDoubleClicked(const QModelIndex &index) {
     if (!fileView) return;
-    if (model->isDir(index)) navigateTo(model->filePath(index));
-    else QDesktopServices::openUrl(QUrl::fromLocalFile(model->filePath(index)));
+    const QString path = model->filePath(index);
+    if (model->isDir(index)) navigateTo(path);
+    else openFileWithAssoc(path);
+}
+
+void MainWindow::openFileWithAssoc(const QString &path) {
+    const QString ext = QFileInfo(path).suffix().toLower();
+    const QString app = SettingsManager::getAssoc(ext);
+    if (!app.isEmpty()) { launchApp(app, path); return; }
+    const QFileInfo info(path);
+    if (isTextViewerType(info) && info.size() <= 8 * 1024 * 1024) {
+        TextViewerDialog dlg(path, this);
+        dlg.exec();
+        return;
+    }
+    QDesktopServices::openUrl(QUrl::fromLocalFile(path));
+}
+
+void MainWindow::launchApp(const QString &app, const QString &file) {
+    if (!QFile::exists(app)) {
+        ModernConfirmDialog dlg(T("error"), T("app_not_found").arg(app), this, T("ok"), false);
+        dlg.exec();
+        return;
+    }
+    QProcess::startDetached(app, {file});
+}
+
+void MainWindow::convertToPng(const QString &path) {
+    QString bin = QStandardPaths::findExecutable(QStringLiteral("magick"));
+    if (bin.isEmpty()) bin = QStandardPaths::findExecutable(QStringLiteral("convert"));
+    if (bin.isEmpty()) {
+        ModernConfirmDialog dlg(T("error"), T("imagemagick_missing"), this, T("ok"), false);
+        dlg.exec();
+        return;
+    }
+    const QFileInfo in(path);
+    const QString out = in.absolutePath() + "/" + in.completeBaseName() + ".png";
+    auto *proc = new QProcess(this);
+    proc->start(bin, {in.absoluteFilePath(), out});
+    connect(proc, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this,
+            [this, proc, path, out](int code, QProcess::ExitStatus) {
+        proc->deleteLater();
+        if (code != 0) {
+            ModernConfirmDialog dlg(T("error"), T("convert_fail"), this, T("ok"), false);
+            dlg.exec();
+            return;
+        }
+        if (SettingsManager::getDeleteAfterAction()) {
+            if (!QFile::remove(path)) {
+                ModernConfirmDialog dlg(T("error"), T("delete_orig_fail"), this, T("ok"), false);
+                dlg.exec();
+            }
+        }
+        refreshCurrentView();
+    });
 }
 
 void MainWindow::onFileSelectionChanged() {
@@ -857,7 +1638,7 @@ void MainWindow::onFileSelectionChanged() {
 void MainWindow::onNewFolderClicked() {
     if (!fileView) return;
     bool ok = false;
-    QString name = QInputDialog::getText(this, T("folder_dialog"), T("folder_label"), QLineEdit::Normal, T("new_folder"), &ok);
+    QString name = getModernText(this, T("folder_dialog"), T("folder_label"), T("new_folder"), &ok);
     if (!ok || name.isEmpty()) return;
 
     if (name.contains('/') || name.contains('\\') || name.contains("..")) {
@@ -878,9 +1659,10 @@ void MainWindow::onNewFolderClicked() {
 
 void MainWindow::createNewFile() {
     if (!fileView) return;
-    bool ok = false;
-    QString name = QInputDialog::getText(this, T("file_dialog"), T("file_label"), QLineEdit::Normal, T("new_file") + ".txt", &ok);
-    if (!ok || name.isEmpty()) return;
+    NewFileDialog dlg(this);
+    if (dlg.exec() != QDialog::Accepted) return;
+    QString name = dlg.fileName();
+    if (name.isEmpty()) return;
 
     if (name.contains('/') || name.contains('\\') || name.contains("..")) {
         ModernConfirmDialog dlg(T("error"), T("invalid_chars"), this, T("ok"), false);
@@ -961,10 +1743,39 @@ void MainWindow::toggleHiddenFiles() {
     showHidden = !showHidden;
     hiddenFilesAction->setChecked(showHidden);
     SettingsManager::setShowHidden(showHidden);
-    QDir::Filters f = QDir::AllEntries | QDir::NoDotAndDotDot;
-    if (showHidden) f |= QDir::Hidden;
-    model->setFilter(f);
-    refreshCurrentView();
+    applyHiddenPolicyToAllViews();
+    if (fileView) onSearchTextChanged(searchBar ? searchBar->text() : QString());
+}
+
+bool MainWindow::rowHiddenByPolicy(const QModelIndex &index) const {
+    return !showHidden && model->fileName(index).startsWith('.');
+}
+
+void MainWindow::applyHiddenPolicyToView(QTreeView *view) {
+    if (!view) return;
+    const QModelIndex root = view->rootIndex();
+    if (!root.isValid()) return;
+    const int rows = model->rowCount(root);
+    for (int row = 0; row < rows; ++row) {
+        const QModelIndex child = model->index(row, 0, root);
+        if (model->fileName(child).startsWith('.'))
+            view->setRowHidden(row, root, !showHidden);
+    }
+}
+
+void MainWindow::applyHiddenPolicyToAllViews() {
+    if (!tabs) return;
+    const auto views = tabs->findChildren<QTreeView *>();
+    for (QTreeView *tv : views) applyHiddenPolicyToView(tv);
+}
+
+QModelIndexList MainWindow::visibleSelectedRows() const {
+    QModelIndexList all = fileView->selectionModel()->selectedRows();
+    if (showHidden) return all;
+    QModelIndexList out;
+    for (const QModelIndex &idx : all)
+        if (!model->fileName(idx).startsWith('.')) out << idx;
+    return out;
 }
 
 void MainWindow::copyPathToClipboard() {
@@ -1010,6 +1821,7 @@ void MainWindow::onSearchTextChanged(const QString &text) {
         for (int row = 0; row < model->rowCount(root); ++row) {
             QModelIndex index = model->index(row, 0, root);
             bool visible = model->fileName(index).contains(text, Qt::CaseInsensitive);
+            if (!showHidden && model->fileName(index).startsWith('.')) visible = false;
             fileView->setRowHidden(row, root, !visible);
         }
     });
@@ -1022,11 +1834,14 @@ void MainWindow::onTabCloseRequested(int index) {
         tabs->removeTab(index);
         widget->deleteLater();
     }
+    refreshTopTabBar();
 }
 
 void MainWindow::onCurrentTabChanged(int index) {
     if (index < 0) return;
+    refreshTopTabBar();
     fileView = qobject_cast<QTreeView *>(tabs->widget(index));
+    applyHiddenPolicyToView(fileView);
 
     if (SettingsManager::getAnimations() && fileView) {
         QTreeView *tv = fileView;
@@ -1108,9 +1923,15 @@ void MainWindow::navigateTabTo(const QString &path) {
     }
 
     fileView->setRootIndex(model->index(path));
+    applyHiddenPolicyToView(fileView);
     maybeShowAdminToast(path);
     updateAddressBar();
     int total = model->rowCount(fileView->rootIndex());
+    if (!showHidden) {
+        total = 0;
+        for (int r = 0; r < model->rowCount(fileView->rootIndex()); ++r)
+            if (!model->fileName(model->index(r, 0, fileView->rootIndex())).startsWith('.')) total++;
+    }
     if (statusLabel) statusLabel->setText(itemsWithFreeSpace(total, path));
     if (statusSelectionLabel) statusSelectionLabel->setText("");
     int idx = tabs->indexOf(fileView);
@@ -1166,6 +1987,119 @@ void MainWindow::openNewTab(const QString &path) {
             if (col > 2) { col = 0; row++; }
         }
 
+        // ---- Netzwerklaufwerke ----
+        auto rebuildComputerTab = [this] {
+            const int cur = tabs->currentIndex();
+            tabs->removeTab(cur);
+            openNewTab(QStringLiteral("computer://"));
+        };
+
+        QFrame *netSep = new QFrame;
+        netSep->setFrameShape(QFrame::HLine);
+        netSep->setStyleSheet(QString("color: %1;").arg(c.border));
+        mainLayout->addSpacing(14);
+        mainLayout->addWidget(netSep);
+        mainLayout->addSpacing(10);
+
+        QLabel *netHeader = new QLabel(T("network_drives_header"));
+        netHeader->setStyleSheet(QString("font-size: 14px; color: %1; font-weight: 700; background: transparent;").arg(c.textPrimary));
+        mainLayout->addWidget(netHeader);
+
+        const QStringList netDrives = SettingsManager::getNetworkDrives();
+        if (netDrives.isEmpty()) {
+            QLabel *empty = new QLabel(T("network_no_drives"));
+            empty->setStyleSheet(QString("font-size: 12px; color: %1; background: transparent;").arg(c.textSecondary));
+            mainLayout->addWidget(empty);
+        } else {
+            auto openNetRow = [this](const QString &p) {
+                if (p.contains(QStringLiteral("://")))
+                    QDesktopServices::openUrl(QUrl(p));
+                else if (QDir(p).exists())
+                    navigateTo(p);
+                else
+                    QDesktopServices::openUrl(QUrl::fromLocalFile(p));
+            };
+            for (const QString &p : netDrives) {
+                QString display = p;
+                if (display.startsWith(QStringLiteral("/mnt/")) ||
+                    display.startsWith(QStringLiteral("/media/")) ||
+                    display.startsWith(QStringLiteral("/run/media/"))) {
+                    display = QFileInfo(p).fileName();
+                }
+                QPushButton *row = new QPushButton;
+                row->setCursor(Qt::PointingHandCursor);
+                row->setStyleSheet(QString(R"(
+                    QPushButton {
+                        background: transparent;
+                        border: 1px solid transparent;
+                        border-radius: 6px;
+                        color: %1;
+                        font-size: 13px;
+                        text-align: left;
+                        padding: 7px 8px;
+                    }
+                    QPushButton:hover { background-color: %2; border-color: %3; }
+                )").arg(c.textPrimary, c.hoverBg, c.border));
+                row->setIcon(QIcon(":/icons/network.ico"));
+                row->setIconSize(QSize(18, 18));
+                row->setText(QString("%1  (%2)").arg(display, p));
+                connect(row, &QPushButton::clicked, this, [this, p, openNetRow] { openNetRow(p); });
+
+                QHBoxLayout *rowWrap = new QHBoxLayout;
+                rowWrap->setContentsMargins(0, 0, 0, 0);
+                QPushButton *remove = new QPushButton("×");
+                remove->setFixedSize(26, 26);
+                remove->setCursor(Qt::PointingHandCursor);
+                remove->setToolTip(T("network_remove"));
+                remove->setStyleSheet(QString(R"(
+                    QPushButton { background: transparent; border: none; border-radius: 5px; color: %1; font-size: 15px; }
+                    QPushButton:hover { background-color: %2; color: #ffffff; }
+                )").arg(c.textSecondary, c.danger));
+                connect(remove, &QPushButton::clicked, this, [this, p, rebuildComputerTab] {
+                    QStringList upd = SettingsManager::getNetworkDrives();
+                    upd.removeAll(p);
+                    SettingsManager::setNetworkDrives(upd);
+                    rebuildComputerTab();
+                });
+                rowWrap->addWidget(remove);
+
+                QWidget *wrap = new QWidget;
+                wrap->setLayout(rowWrap);
+                QHBoxLayout *outer = new QHBoxLayout;
+                outer->setContentsMargins(0, 0, 0, 0);
+                outer->setSpacing(0);
+                outer->addWidget(row, 1);
+                outer->addWidget(wrap);
+                mainLayout->addLayout(outer);
+            }
+        }
+
+        QPushButton *addNet = new QPushButton(colorizeIcon(":/icons/network.ico", QColor(c.textPrimary)), T("network_add"));
+        addNet->setCursor(Qt::PointingHandCursor);
+        addNet->setStyleSheet(QString(R"(
+            QPushButton {
+                background-color: %1;
+                border: 1px solid %2;
+                border-radius: 8px;
+                color: %3;
+                font-size: 13px;
+                padding: 8px 14px;
+            }
+            QPushButton:hover { background-color: %4; }
+        )").arg(c.elevatedBg, c.border, c.textPrimary, c.hoverBg));
+        connect(addNet, &QPushButton::clicked, this, [this, rebuildComputerTab] {
+            bool ok = false;
+            const QString drive = QInputDialog::getText(this, T("network_add"), T("network_path_label"),
+                                                        QLineEdit::Normal, QStringLiteral("/mnt/nas"), &ok);
+            if (!ok || drive.trimmed().isEmpty()) return;
+            QString clean = drive.trimmed();
+            QStringList upd = SettingsManager::getNetworkDrives();
+            if (!upd.contains(clean)) upd << clean;
+            SettingsManager::setNetworkDrives(upd);
+            rebuildComputerTab();
+        });
+        mainLayout->addWidget(addNet);
+
         QScrollArea *scroll = new QScrollArea();
         scroll->setWidget(container);
         scroll->setWidgetResizable(true);
@@ -1173,6 +2107,7 @@ void MainWindow::openNewTab(const QString &path) {
 
         int idx = tabs->addTab(scroll, QIcon(":/icons/computer.ico"), T("this_pc"));
         tabs->setCurrentIndex(idx);
+        refreshTopTabBar();
         return;
     }
 
@@ -1186,6 +2121,7 @@ void MainWindow::openNewTab(const QString &path) {
     view->setContextMenuPolicy(Qt::CustomContextMenu);
     view->setIconSize(QSize(20, 20));
     view->setRootIndex(model->index(path));
+    applyHiddenPolicyToView(view);
     view->setDragDropMode(QAbstractItemView::DragDrop);
     view->setDefaultDropAction(Qt::MoveAction);
 
@@ -1198,7 +2134,9 @@ void MainWindow::openNewTab(const QString &path) {
     view->setColumnWidth(1, 120);
     view->setColumnWidth(2, 200);
     view->setColumnWidth(3, 200);
+    view->setItemDelegateForColumn(1, new SizeColumnDelegate(view));
     view->setItemDelegateForColumn(3, new DateColumnDelegate(view));
+    view->setItemDelegateForColumn(0, new HiddenStyleDelegate(view));
 
     // Gespeicherte Sortierung anwenden, Standard: Name aufsteigend
     const int sortCol = qBound(0, SettingsManager::getSortColumn(), 3);
@@ -1217,6 +2155,7 @@ void MainWindow::openNewTab(const QString &path) {
     int idx = tabs->addTab(view, iconProvider.icon(QFileInfo(path)), title);
     tabs->setCurrentIndex(idx);
     fileView = view;
+    refreshTopTabBar();
 }
 
 void MainWindow::closeCurrentTab() {
@@ -1243,10 +2182,28 @@ void MainWindow::updateBreadcrumbs(const QString &path) {
         delete item;
     }
 
+    // Bleistift-Button: wechselt in den Bearbeitungsmodus der Adressleiste
+    auto addEditBtn = [this, &c] {
+        QPushButton *editBtn = new QPushButton;
+        editBtn->setIcon(colorizeIcon(":/icons/rename.svg", QColor(c.textSecondary)));
+        editBtn->setFlat(true);
+        editBtn->setCursor(Qt::PointingHandCursor);
+        editBtn->setToolTip(QStringLiteral("Strg+L"));
+        editBtn->setFixedSize(26, 26);
+        editBtn->setStyleSheet(QString("QPushButton { border-radius: 5px; }"
+                                       "QPushButton:hover { background-color: %1; }").arg(c.hoverBg));
+        connect(editBtn, &QPushButton::clicked, this, &MainWindow::startPathEdit);
+        breadcrumbLayout->addWidget(editBtn);
+    };
+
     if (path == "computer://") {
         QPushButton *btn = new QPushButton("Dieser PC");
         btn->setFlat(true);
+        btn->setCursor(Qt::PointingHandCursor);
+        btn->setToolTip(T("this_pc"));
         breadcrumbLayout->addWidget(btn);
+        breadcrumbLayout->addStretch();
+        addEditBtn();
         return;
     }
 
@@ -1256,7 +2213,10 @@ void MainWindow::updateBreadcrumbs(const QString &path) {
     if (parts.isEmpty()) {
         QPushButton *btn = new QPushButton("/");
         btn->setFlat(true);
+        btn->setCursor(Qt::PointingHandCursor);
         breadcrumbLayout->addWidget(btn);
+        breadcrumbLayout->addStretch();
+        addEditBtn();
         return;
     }
 
@@ -1289,11 +2249,51 @@ void MainWindow::updateBreadcrumbs(const QString &path) {
         }
     }
     breadcrumbLayout->addStretch();
+    addEditBtn();
+}
+
+void MainWindow::startPathEdit() {
+    if (!fileView || !fileView->rootIndex().isValid()) return;
+    if (!breadcrumbLayout) return;
+    const QString path = model->filePath(fileView->rootIndex());
+
+    QLayoutItem *item;
+    while ((item = breadcrumbLayout->takeAt(0)) != nullptr) {
+        delete item->widget();
+        delete item;
+    }
+
+    pathEditor = new QLineEdit(path);
+    pathEditor->setObjectName("pathEditor");
+    pathEditor->setClearButtonEnabled(true);
+    pathEditor->setMinimumWidth(360);
+    pathEditor->installEventFilter(this);
+    connect(pathEditor, &QLineEdit::returnPressed, this, [this] { commitPathEdit(pathEditor->text()); });
+    breadcrumbLayout->addWidget(pathEditor, 1);
+
+    pathEditor->setFocus(Qt::ShortcutFocusReason);
+    pathEditor->selectAll();
+}
+
+void MainWindow::commitPathEdit(const QString &text) {
+    QString p = text.trimmed();
+    if (p.isEmpty()) { updateBreadcrumbs(model->filePath(fileView->rootIndex())); return; }
+    if (!p.startsWith('/') && !p.startsWith("~")) p = QDir::homePath() + "/" + p;
+    if (p.startsWith('~')) p = QDir::homePath() + p.mid(1);
+    if (p == "computer://") {
+        openNewTab("computer://");
+        return;
+    }
+    if (QFileInfo::exists(QDir::cleanPath(p))) {
+        navigateTo(QDir::cleanPath(p));
+    } else {
+        updateBreadcrumbs(model->filePath(fileView->rootIndex()));
+    }
 }
 
 void MainWindow::updateSelectionActions() {
     if (!fileView || !fileView->selectionModel()) return;
-    bool selected = !fileView->selectionModel()->selectedRows().isEmpty();
+    bool selected = !visibleSelectedRows().isEmpty();
     copyAction->setEnabled(selected);
     cutAction->setEnabled(selected);
     deleteAction->setEnabled(selected);
@@ -1305,7 +2305,7 @@ void MainWindow::updateSelectionActions() {
 void MainWindow::updateStatusDetails() {
     if (!statusSelectionLabel) return;
     if (!fileView || !fileView->selectionModel()) { statusSelectionLabel->setText(""); return; }
-    QModelIndexList selected = fileView->selectionModel()->selectedRows();
+    QModelIndexList selected = visibleSelectedRows();
     if (selected.isEmpty()) { statusSelectionLabel->setText(""); return; }
 
     if (selected.size() == 1) {
@@ -1332,6 +2332,7 @@ void MainWindow::refreshCurrentView() {
     QString path = model->filePath(fileView->rootIndex());
     fileView->setRootIndex(QModelIndex());
     fileView->setRootIndex(model->index(path));
+    applyHiddenPolicyToView(fileView);
     int total = model->rowCount(fileView->rootIndex());
     if (statusLabel) statusLabel->setText(itemsWithFreeSpace(total, path));
     if (!trashPath.isEmpty() && trashItem) {
@@ -1434,6 +2435,15 @@ void MainWindow::moveEvent(QMoveEvent *event) {
 }
 
 bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
+    // Escape in der Adressleiste: Bearbeitung abbrechen
+    if (obj == pathEditor && event->type() == QEvent::KeyPress) {
+        auto *ke = static_cast<QKeyEvent *>(event);
+        if (ke->key() == Qt::Key_Escape) {
+            updateBreadcrumbs(model->filePath(fileView->rootIndex()));
+            return true;
+        }
+    }
+
     // Maus-Seitentasten: Vor- und Zurücknavigation
     if (event->type() == QEvent::MouseButtonRelease &&
         SettingsManager::getMouseSideNav()) {
@@ -1561,6 +2571,35 @@ void MainWindow::showContextMenu(const QPoint &pos) {
         }
         QAction *open = menu.addAction(colorizeIcon(":/icons/open_folder.svg", iconColor), T("open"));
         QAction *openTab = dir ? menu.addAction(QIcon(":/icons/folder_open.ico"), T("open_new_tab")) : nullptr;
+
+        QMenu *openWithMenu = nullptr;
+        const QString ext = QFileInfo(path).suffix().toLower();
+        if (!dir && !ext.isEmpty()) {
+            openWithMenu = menu.addMenu(colorizeIcon(":/icons/open_folder.svg", iconColor), T("open_with"));
+            const QString assocApp = SettingsManager::getAssoc(ext);
+            if (!assocApp.isEmpty()) {
+                QAction *a = openWithMenu->addAction(QFileInfo(assocApp).fileName());
+                connect(a, &QAction::triggered, this, [this, path, assocApp] { launchApp(assocApp, path); });
+                openWithMenu->addSeparator();
+            }
+            QAction *choose = openWithMenu->addAction(T("open_with_choose"));
+            QAction *rememberType = openWithMenu->addAction(T("remember_for_type").arg(ext));
+            rememberType->setCheckable(true);
+            rememberType->setChecked(!SettingsManager::getAssoc(ext).isEmpty());
+            connect(choose, &QAction::triggered, this, [this, path, ext, rememberType] {
+                const QString app = QFileDialog::getOpenFileName(this, T("open_with_choose"));
+                if (app.isEmpty()) return;
+                launchApp(app, path);
+                if (rememberType->isChecked()) SettingsManager::setAssoc(ext, app);
+            });
+        }
+
+        const QStringList imgExts = { "png","jpg","jpeg","bmp","gif","webp","tif","tiff","ico","avif" };
+        if (!dir && imgExts.contains(ext)) {
+            QMenu *actions = menu.addMenu(QIcon(":/icons/image.ico"), T("acts_actions"));
+            QAction *conv = actions->addAction(T("convert_png"));
+            connect(conv, &QAction::triggered, this, [this, path] { convertToPng(path); });
+        }
         menu.addSeparator();
         QAction *copy = menu.addAction(colorizeIcon(":/icons/copy.svg", iconColor), T("copy"));
         QAction *cut = menu.addAction(colorizeIcon(":/icons/cut.svg", iconColor), T("cut"));
@@ -1574,7 +2613,7 @@ void MainWindow::showContextMenu(const QPoint &pos) {
         menu.addSeparator();
         QAction *props = menu.addAction(colorizeIcon(":/icons/info.svg", iconColor), T("properties"));
 
-        connect(open, &QAction::triggered, this, [this, path, dir] { if (dir) navigateTo(path); else QDesktopServices::openUrl(QUrl::fromLocalFile(path)); });
+        connect(open, &QAction::triggered, this, [this, path, dir] { if (dir) navigateTo(path); else openFileWithAssoc(path); });
         if (openTab) connect(openTab, &QAction::triggered, this, [this, path] { openNewTab(path); });
         connect(copy, &QAction::triggered, this, [this, path] { clipboardPath = path; isCut = false; updateSelectionActions(); });
         connect(cut, &QAction::triggered, this, [this, path] { clipboardPath = path; isCut = true; updateSelectionActions(); });
@@ -1646,7 +2685,7 @@ void MainWindow::openTabContextMenu(const QPoint &pos) {
 
 void MainWindow::createZip() {
     if (!fileView || !fileView->selectionModel()) return;
-    QModelIndexList sel = fileView->selectionModel()->selectedRows();
+    QModelIndexList sel = visibleSelectedRows();
     if (sel.isEmpty()) return;
 
     const QString zipBin = QStandardPaths::findExecutable(QStringLiteral("zip"));
@@ -1690,7 +2729,7 @@ void MainWindow::createZip() {
 
 void MainWindow::extractZip() {
     if (!fileView || !fileView->selectionModel()) return;
-    QModelIndexList sel = fileView->selectionModel()->selectedRows();
+    QModelIndexList sel = visibleSelectedRows();
     if (sel.size() != 1) return;
 
     const QString zipPath = model->filePath(sel.first());
@@ -1824,18 +2863,27 @@ void MainWindow::pasteHere() {
 
 void MainWindow::deleteSelected() {
     if (!fileView || !fileView->selectionModel()) return;
-    QModelIndexList selected = fileView->selectionModel()->selectedRows();
+    QModelIndexList selected = visibleSelectedRows();
     if (selected.isEmpty()) return;
 
-    QString message = T("delete_msg").arg(selected.size());
+    // Innerhalb des Papierkorbs löschen endgültig, statt erneut in den
+    // Papierkorb zu verschieben.
+    const QString currentDir = fileView->rootIndex().isValid()
+            ? model->filePath(fileView->rootIndex()) : QString();
+    const bool inTrash = !trashPath.isEmpty() && !currentDir.isEmpty()
+            && QDir(currentDir).canonicalPath() == QDir(trashPath).canonicalPath();
+
+    QString message = T(inTrash ? "delete_perm_msg" : "delete_msg").arg(selected.size());
+    QString confirm = T(inTrash ? "delete_perm_confirm" : "delete_confirm");
 
     if (SettingsManager::getConfirmDelete()) {
-        ModernConfirmDialog dialog(T("delete_confirm"), message, this);
+        ModernConfirmDialog dialog(confirm, message, this);
         if (dialog.exec() != QDialog::Accepted) return;
     }
 
-    // Kein Papierkorb verfügbar (z.B. Windows) → endgültig löschen
-    if (trashPath.isEmpty()) {
+    // Kein Papierkorb verfügbar (z.B. Windows) oder im Papierkorb → endgültig löschen
+    if (trashPath.isEmpty() || inTrash) {
+        const QString failKey = T(inTrash ? "delete_perm_fail" : "delete_fail");
         int delFail = 0;
         for (const QModelIndex &index : selected) {
             QString path = model->filePath(index);
@@ -1844,8 +2892,13 @@ void MainWindow::deleteSelected() {
             if (!success) delFail++;
         }
         if (delFail > 0) {
-            ModernConfirmDialog dlg(T("error"), T("delete_fail").arg(delFail), this, T("ok"), false);
+            ModernConfirmDialog dlg(T("error"), failKey.arg(delFail), this, T("ok"), false);
             dlg.exec();
+        }
+        if (inTrash && trashItem) {
+            bool full = QDir(trashPath).exists()
+                    && !QDir(trashPath).entryList(QDir::NoDotAndDotDot | QDir::AllEntries).isEmpty();
+            trashItem->setIcon(QIcon(full ? ":/icons/trash_full.ico" : ":/icons/trash_empty.ico"));
         }
         refreshCurrentView();
         return;
@@ -1902,10 +2955,10 @@ void MainWindow::deleteSelected() {
 void MainWindow::renameSelected() {
     if (!fileView) return;
     QModelIndex index = fileView->currentIndex();
-    if (!index.isValid()) return;
+    if (!index.isValid() || rowHiddenByPolicy(index)) return;
     QFileInfo info(model->filePath(index));
     bool ok = false;
-    QString name = QInputDialog::getText(this, T("rename_dialog"), T("rename_label"), QLineEdit::Normal, info.fileName(), &ok);
+    QString name = getModernText(this, T("rename_dialog"), T("rename_label"), info.fileName(), &ok);
     if (!ok || name.isEmpty() || name == info.fileName()) return;
 
     if (name.contains('/') || name.contains('\\') || name.contains("..")) {
@@ -1925,7 +2978,7 @@ void MainWindow::renameSelected() {
 void MainWindow::copySelected() {
     if (!fileView) return;
     QModelIndex index = fileView->currentIndex();
-    if (!index.isValid()) return;
+    if (!index.isValid() || rowHiddenByPolicy(index)) return;
     clipboardPath = model->filePath(index);
     isCut = false;
     updateSelectionActions();
@@ -1934,7 +2987,7 @@ void MainWindow::copySelected() {
 void MainWindow::cutSelected() {
     if (!fileView) return;
     QModelIndex index = fileView->currentIndex();
-    if (!index.isValid()) return;
+    if (!index.isValid() || rowHiddenByPolicy(index)) return;
     clipboardPath = model->filePath(index);
     isCut = true;
     updateSelectionActions();
@@ -1984,16 +3037,18 @@ void MainWindow::openSettings() {
         updateAddressBar();
     };
 
-    connect(&dlg, &SettingsDialog::restartNeeded, &dlg, [this]() {
-        ModernConfirmDialog ask(T("update_restart_title"), T("update_restart_msg"), this,
-                                T("update_restart_now"), false);
-        if (ask.exec() == QDialog::Accepted) {
-            QProcess::startDetached(QCoreApplication::applicationFilePath(), {});
-            qApp->quit();
-        }
+    connect(&dlg, &SettingsDialog::restartRequested, &dlg, [this]() {
+        QProcess::startDetached(QCoreApplication::applicationFilePath(), {});
+        qApp->quit();
     });
 
-    dlg.exec();
+    if (dlg.exec() == QDialog::Accepted) {
+        // Geänderte Sichtbarkeiten sofort übernehmen
+        navToolbar->setVisible(SettingsManager::getShowNavBar());
+        cmdToolbar->setVisible(SettingsManager::getShowCmdBar());
+        if (tabBarToolbar) tabBarToolbar->setVisible(SettingsManager::getShowTabsBar());
+        searchBar->setVisible(!SettingsManager::getHideSearchBar());
+    }
 }
 
 void MainWindow::closeEvent(QCloseEvent *event) {

@@ -113,6 +113,30 @@ void AppStyle::lockToCustomStyle() {
     QApplication::setStyle(QStyleFactory::create("Fusion"));
 }
 
+void AppStyle::applyPalette() {
+    const ThemeColors &c = colors();
+    QPalette pal;
+    pal.setColor(QPalette::Window, QColor(c.windowBg));
+    pal.setColor(QPalette::WindowText, QColor(c.textPrimary));
+    pal.setColor(QPalette::Base, QColor(c.surfaceBg));
+    pal.setColor(QPalette::AlternateBase, QColor(c.chromeBg));
+    pal.setColor(QPalette::ToolTipBase, QColor(c.elevatedBg));
+    pal.setColor(QPalette::ToolTipText, QColor(c.textPrimary));
+    pal.setColor(QPalette::Text, QColor(c.textPrimary));
+    pal.setColor(QPalette::Button, QColor(c.chromeBg));
+    pal.setColor(QPalette::ButtonText, QColor(c.textPrimary));
+    pal.setColor(QPalette::BrightText, QColor(c.danger));
+    pal.setColor(QPalette::Link, QColor(c.accent));
+    pal.setColor(QPalette::Highlight, QColor(c.selectedBg));
+    pal.setColor(QPalette::HighlightedText, QColor(c.textPrimary));
+    pal.setColor(QPalette::PlaceholderText, QColor(c.textSecondary));
+    pal.setColor(QPalette::Disabled, QPalette::Text, QColor(c.textDisabled));
+    pal.setColor(QPalette::Disabled, QPalette::ButtonText, QColor(c.textDisabled));
+    pal.setColor(QPalette::Disabled, QPalette::WindowText, QColor(c.textDisabled));
+    pal.setColor(QPalette::Disabled, QPalette::Highlight, QColor(c.hoverBg));
+    QApplication::setPalette(pal);
+}
+
 QString AppStyle::globalStyleSheet() {
     const ThemeColors &c = colors();
 
@@ -123,6 +147,12 @@ QString AppStyle::globalStyleSheet() {
 
         QMainWindow, QDialog {
             background-color: %windowBg;
+        }
+
+        /* Klickbare Elemente zeigen den Hand-Cursor */
+        QPushButton, QToolButton, QComboBox, QCheckBox, QListWidget,
+        QTreeView#sidebar::item, QMenu::item, QHeaderView::section {
+            cursor: pointer;
         }
 
         QWidget#centralHost {
@@ -152,6 +182,7 @@ QString AppStyle::globalStyleSheet() {
         }
         QToolBar QToolButton:hover {
             background-color: %hoverBg;
+            cursor: pointer;
         }
         QToolBar QToolButton:pressed {
             background-color: %pressedBg;
@@ -183,6 +214,10 @@ QString AppStyle::globalStyleSheet() {
             background-color: %selectedBg;
             border: none;
             color: %textPrimary;
+        }
+        QTreeView::item:focus {
+            outline: none;
+            border: none;
         }
         QTreeView::branch { background: transparent; }
 

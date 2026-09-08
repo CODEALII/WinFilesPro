@@ -62,6 +62,12 @@ public:
     // erzeugt wird, um jegliche Einmischung von Desktop-/GTK-Themes zu verhindern.
     static void lockToCustomStyle();
 
+    // Schreibt eine vollständige, eigene QPalette auf QApplication, damit kein
+    // Systemtheme (Yaru/GNOME) über Paletten-Rollen (Highlight, Base, ...)
+    // durchscheinen kann. Wird nach dem Style-Setup in main() aufgerufen und
+    // vom MainWindow bei jedem Theme-Wechsel erneut angewendet.
+    static void applyPalette();
+
 private:
     static AppTheme s_theme;
 };

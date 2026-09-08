@@ -45,7 +45,12 @@
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QMimeData>
+#include <QDateTime>
+#include <QUrlQuery>
+#include <QTextStream>
 #include <functional>
+#include <cerrno>
+#include <cstring>
 
 #ifndef Q_OS_WIN32
 #include <unistd.h>
@@ -55,14 +60,16 @@
 // Hilfsfunktionen
 // ---------------------------------------------------------------------------
 
-// Rechtebündige Anzeige für die Spalte "Geändert am"
+// Rechtebündige Anzeige für die Spalte "Geändert am" mit rechtem Abstand
 class DateColumnDelegate : public QStyledItemDelegate {
 public:
     explicit DateColumnDelegate(QObject *parent) : QStyledItemDelegate(parent) {}
     void initStyleOption(QStyleOptionViewItem *option, const QModelIndex &index) const override {
         QStyledItemDelegate::initStyleOption(option, index);
-        if (index.column() == 3)
+        if (index.column() == 3) {
             option->displayAlignment = Qt::AlignRight | Qt::AlignVCenter;
+            option->rect.adjust(0, 0, -10, 0);
+        }
     }
 };
 
@@ -80,14 +87,25 @@ static bool isUsableVolume(const QStorageInfo &storage) {
     return true;
 }
 
-// Braucht der aktuelle Benutzer erhöhte Rechte, um den Ordner überhaupt zu lesen?
+// Braucht der aktuelle Benutzer erhöhte Rechte, um den Ordner zu öffnen
+// oder dort Dateien anzulegen? (nicht lesbar ODER nicht beschreibbar)
 static bool needsElevation(const QString &path) {
 #ifdef Q_OS_WIN32
     Q_UNUSED(path);
     return false;
 #else
-    return ::getuid() != 0 && QFileInfo(path).exists() && !QFileInfo(path).isReadable();
+    if (::getuid() == 0) return false;
+    if (!QFileInfo(path).exists()) return false;
+    const QByteArray p = QFile::encodeName(path);
+    if (::access(p.constData(), R_OK | X_OK) != 0) return true;
+    if (::access(p.constData(), W_OK) != 0) return true;
+    return false;
 #endif
+}
+
+// Lesbare Fehlerbeschreibung für die zuletzt fehlgeschlagene Dateioperation
+static QString curDirErrorReason() {
+    return QString::fromLocal8Bit(std::strerror(errno));
 }
 
 // App mit polkit (OS-Passwortdialog) als root neu starten
@@ -332,6 +350,9 @@ MainWindow::MainWindow(QWidget *parent)
     setWindowIcon(QIcon(":/icons/explorer.ico"));
     setMinimumSize(960, 620);
 
+    // Maus-Seitentasten (Vor/Zurück) app-weit abfangen
+    qApp->installEventFilter(this);
+
     applyTheme();
 
     setupRibbon();
@@ -470,7 +491,10 @@ void MainWindow::setupLayout() {
     model = new QFileSystemModel(this);
     model->setIconProvider(&iconProvider);
     model->setRootPath("/");
-    model->setFilter(QDir::AllEntries | QDir::NoDotAndDotDot);
+    showHidden = SettingsManager::getShowHidden();
+    QDir::Filters f = QDir::AllEntries | QDir::NoDotAndDotDot;
+    if (showHidden) f |= QDir::Hidden;
+    model->setFilter(f);
 
     sideModel = new QStandardItemModel(this);
 
@@ -734,8 +758,10 @@ void MainWindow::onNewFolderClicked() {
     }
 
     if (!QDir(model->filePath(fileView->rootIndex())).mkdir(name)) {
-        ModernConfirmDialog dlg(T("error"), T("folder_create_fail"), this, T("ok"), false);
+        QString reason(curDirErrorReason());
+        ModernConfirmDialog dlg(T("error"), T("folder_create_fail") + T("error_reason").arg(reason), this, T("ok"), false);
         dlg.exec();
+        maybeShowAdminToast(model->filePath(fileView->rootIndex()));
         return;
     }
     refreshCurrentView();
@@ -764,8 +790,11 @@ void MainWindow::createNewFile() {
         f.close();
         refreshCurrentView();
     } else {
-        ModernConfirmDialog dlg(T("error"), T("file_fail"), this, T("ok"), false);
+        QString reason = f.errorString();
+        if (reason.isEmpty()) reason = curDirErrorReason();
+        ModernConfirmDialog dlg(T("error"), T("file_fail") + T("error_reason").arg(reason), this, T("ok"), false);
         dlg.exec();
+        maybeShowAdminToast(model->filePath(fileView->rootIndex()));
     }
 }
 
@@ -822,6 +851,7 @@ void MainWindow::onRefreshClicked() {
 void MainWindow::toggleHiddenFiles() {
     showHidden = !showHidden;
     hiddenFilesAction->setChecked(showHidden);
+    SettingsManager::setShowHidden(showHidden);
     QDir::Filters f = QDir::AllEntries | QDir::NoDotAndDotDot;
     if (showHidden) f |= QDir::Hidden;
     model->setFilter(f);
@@ -1048,6 +1078,12 @@ void MainWindow::openNewTab(const QString &path) {
     view->setColumnWidth(3, 200);
     view->setItemDelegateForColumn(3, new DateColumnDelegate(view));
 
+    // Gespeicherte Sortierung anwenden, Standard: Name aufsteigend
+    const int sortCol = qBound(0, SettingsManager::getSortColumn(), 3);
+    const Qt::SortOrder sortOrd = SettingsManager::getSortOrder();
+    view->sortByColumn(sortCol, sortOrd);
+    view->header()->setSortIndicator(sortCol, sortOrd);
+
     connect(view, &QTreeView::customContextMenuRequested, this, &MainWindow::showContextMenu);
     connect(view, &QTreeView::doubleClicked, this, &MainWindow::onFileDoubleClicked);
     connect(view->selectionModel(), &QItemSelectionModel::selectionChanged, this, &MainWindow::onFileSelectionChanged);
@@ -1203,11 +1239,13 @@ void MainWindow::maybeShowAdminToast(const QString &path) {
                 border: 1px solid %3;
                 border-radius: 10px;
             }
+            QWidget#adminToast:hover { border-color: %5; }
             QLabel { background: transparent; border: none; }
-            QLabel#toastTitle { color: %2; font-size: 13px; font-weight: 600; }
+            QLabel#toastTitle { color: %2; font-size: 13px; font-weight: 700; }
             QLabel#toastHint { color: %4; font-size: 11px; }
-        )").arg(c.elevatedBg, c.textPrimary, c.border, c.textSecondary));
+        )").arg(c.elevatedBg, c.textPrimary, c.border, c.textSecondary, c.accent));
         adminToast->setAttribute(Qt::WA_StyledBackground, true);
+        adminToast->setAttribute(Qt::WA_Hover);
         adminToast->setCursor(Qt::PointingHandCursor);
         adminToast->installEventFilter(this);
 
@@ -1263,6 +1301,19 @@ void MainWindow::moveEvent(QMoveEvent *event) {
 }
 
 bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
+    // Maus-Seitentasten: Vor- und Zurücknavigation
+    if (event->type() == QEvent::MouseButtonRelease) {
+        auto *me = static_cast<QMouseEvent *>(event);
+        if (me->button() == Qt::BackButton) {
+            if (me->modifiers() == Qt::NoModifier) onBackClicked();
+            return true;
+        }
+        if (me->button() == Qt::ForwardButton) {
+            if (me->modifiers() == Qt::NoModifier) onForwardClicked();
+            return true;
+        }
+    }
+
     if (obj == adminToast) {
         if (event->type() == QEvent::MouseButtonRelease) {
             launchElevated(adminToastPath);
@@ -1317,10 +1368,36 @@ void MainWindow::showSidebarContextMenu(const QPoint &pos) {
     QModelIndex index = sidebar->indexAt(pos);
     if (!index.isValid()) return;
     QStandardItem *item = sideModel->itemFromIndex(index);
-    if (!item || !item->data(Qt::UserRole + 1).toBool()) return;
+    if (!item) return;
+
+    QMenu menu(this);
+
+    // Papierkorb: leeren
+    if (item == trashItem) {
+        QAction *empty = menu.addAction(QIcon(":/icons/trash_full.ico"), T("empty_trash"));
+        connect(empty, &QAction::triggered, this, [this] {
+            if (trashPath.isEmpty()) return;
+            ModernConfirmDialog ask(T("empty_trash_title"), T("empty_trash_msg"), this, T("empty_trash_confirm"), false);
+            if (ask.exec() != QDialog::Accepted) return;
+            for (const QFileInfo &fi : QDir(trashPath).entryInfoList(QDir::AllEntries | QDir::NoDotAndDotDot)) {
+                if (fi.isDir()) QDir(fi.absoluteFilePath()).removeRecursively();
+                else QFile::remove(fi.absoluteFilePath());
+            }
+            const QString infoDir = QFileInfo(trashPath).dir().filePath("info");
+            for (const QFileInfo &fi : QDir(infoDir).entryInfoList(QDir::AllEntries | QDir::NoDotAndDotDot)) {
+                QFile::remove(fi.absoluteFilePath());
+            }
+            if (trashItem) trashItem->setIcon(QIcon(":/icons/trash_empty.ico"));
+            refreshCurrentView();
+        });
+        menu.exec(sidebar->viewport()->mapToGlobal(pos));
+        return;
+    }
+
+    // Angepinnte Ordner: lösen
+    if (!item->data(Qt::UserRole + 1).toBool()) return;
 
     const QString path = item->data(Qt::UserRole).toString();
-    QMenu menu(this);
     QAction *unpin = menu.addAction(T("unpin"));
     connect(unpin, &QAction::triggered, this, [this, item, path] {
         QStandardItem *parentItem = item->parent();
@@ -1414,12 +1491,30 @@ void MainWindow::showSortMenu() {
     asc->setChecked(fileView->header()->sortIndicatorOrder() == Qt::AscendingOrder);
     desc->setChecked(fileView->header()->sortIndicatorOrder() == Qt::DescendingOrder);
 
-    connect(byName, &QAction::triggered, this, [this] { fileView->sortByColumn(0, fileView->header()->sortIndicatorOrder()); });
-    connect(bySize, &QAction::triggered, this, [this] { fileView->sortByColumn(1, fileView->header()->sortIndicatorOrder()); });
-    connect(byType, &QAction::triggered, this, [this] { fileView->sortByColumn(2, fileView->header()->sortIndicatorOrder()); });
-    connect(byDate, &QAction::triggered, this, [this] { fileView->sortByColumn(3, fileView->header()->sortIndicatorOrder()); });
-    connect(asc, &QAction::triggered, this, [this] { fileView->sortByColumn(fileView->header()->sortIndicatorSection(), Qt::AscendingOrder); });
-    connect(desc, &QAction::triggered, this, [this] { fileView->sortByColumn(fileView->header()->sortIndicatorSection(), Qt::DescendingOrder); });
+    connect(byName, &QAction::triggered, this, [this] {
+            fileView->sortByColumn(0, fileView->header()->sortIndicatorOrder());
+            SettingsManager::setSortColumn(0);
+        });
+        connect(bySize, &QAction::triggered, this, [this] {
+            fileView->sortByColumn(1, fileView->header()->sortIndicatorOrder());
+            SettingsManager::setSortColumn(1);
+        });
+        connect(byType, &QAction::triggered, this, [this] {
+            fileView->sortByColumn(2, fileView->header()->sortIndicatorOrder());
+            SettingsManager::setSortColumn(2);
+        });
+        connect(byDate, &QAction::triggered, this, [this] {
+            fileView->sortByColumn(3, fileView->header()->sortIndicatorOrder());
+            SettingsManager::setSortColumn(3);
+        });
+        connect(asc, &QAction::triggered, this, [this] {
+            fileView->sortByColumn(fileView->header()->sortIndicatorSection(), Qt::AscendingOrder);
+            SettingsManager::setSortOrder(Qt::AscendingOrder);
+        });
+        connect(desc, &QAction::triggered, this, [this] {
+            fileView->sortByColumn(fileView->header()->sortIndicatorSection(), Qt::DescendingOrder);
+            SettingsManager::setSortOrder(Qt::DescendingOrder);
+        });
 
     menu.exec(QCursor::pos());
 }
@@ -1491,16 +1586,61 @@ void MainWindow::deleteSelected() {
 
     if (dialog.exec() != QDialog::Accepted) return;
 
+    // Kein Papierkorb verfügbar (z.B. Windows) → endgültig löschen
+    if (trashPath.isEmpty()) {
+        int delFail = 0;
+        for (const QModelIndex &index : selected) {
+            QString path = model->filePath(index);
+            bool success = model->isDir(index) ? QDir(path).removeRecursively()
+                                               : QFile::remove(path);
+            if (!success) delFail++;
+        }
+        if (delFail > 0) {
+            ModernConfirmDialog dlg(T("error"), T("delete_fail").arg(delFail), this, T("ok"), false);
+            dlg.exec();
+        }
+        refreshCurrentView();
+        return;
+    }
+
+    QDir trashDir(trashPath);
+    if (!trashDir.mkpath(".")) {
+        ModernConfirmDialog dlg(T("error"), T("trash_unavailable"), this, T("ok"), false);
+        dlg.exec();
+        return;
+    }
+    const QDir infoDir(QFileInfo(trashPath).dir().filePath("info"));
+    infoDir.mkpath(".");
+
     int failCount = 0;
     for (const QModelIndex &index : selected) {
         QString path = model->filePath(index);
-        bool success = false;
-        if (model->isDir(index)) {
-            success = QDir(path).removeRecursively();
-        } else {
-            success = QFile::remove(path);
+        QFileInfo info(path);
+        QString base = info.fileName();
+        QString target = trashDir.filePath(base);
+        int n = 1;
+        while (QFileInfo::exists(target)) {
+            target = trashDir.filePath(base + " (" + QString::number(n++) + ")");
         }
-        if (!success) failCount++;
+
+        if (QFile::rename(path, target)) {
+            // Freedesktop-Trashinfo für Wiederherstellung/Historie anlegen
+            QFile ti(infoDir.filePath(QFileInfo(target).fileName() + ".trashinfo"));
+            if (ti.open(QIODevice::WriteOnly | QIODevice::Text)) {
+                QTextStream ts(&ti);
+                ts << "[Trash Info]\n";
+                ts << "Path=" << QUrl::fromLocalFile(path).toString(QUrl::FullyEncoded) << "\n";
+                ts << "DeletionDate=" << QDateTime::currentDateTime().toString(Qt::ISODate) << "\n";
+            }
+        } else {
+            failCount++;
+        }
+    }
+
+    // Papierkorb-Icon in der Sidebar aktualisieren
+    if (trashItem) {
+        bool full = QDir(trashPath).exists() && !QDir(trashPath).entryList(QDir::NoDotAndDotDot | QDir::AllEntries).isEmpty();
+        trashItem->setIcon(QIcon(full ? ":/icons/trash_full.ico" : ":/icons/trash_empty.ico"));
     }
 
     if (failCount > 0) {
@@ -1609,9 +1749,13 @@ void MainWindow::openSettings() {
 }
 
 void MainWindow::closeEvent(QCloseEvent *event) {
-    // Fenstergröße und Position speichern
+    // Fenstergröße, Position und zuletzt geöffneten Ordner speichern
     SettingsManager::setWindowSize(size());
     SettingsManager::setWindowPosition(pos());
+    if (fileView && fileView->rootIndex().isValid()) {
+        SettingsManager::setLastPath(model->filePath(fileView->rootIndex()));
+    }
+    SettingsManager::setShowHidden(showHidden);
     SettingsManager::save();
     event->accept();
 }

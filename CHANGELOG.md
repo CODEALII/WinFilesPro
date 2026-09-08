@@ -1,5 +1,15 @@
 # WinFilesPro Changelog
 
+## [0.4.1] - 2026-09-08
+
+### Fixes
+- Settings now persist across restarts: hidden-files toggle, sort column/order and last visited folder are restored
+- File list defaults to name sorting with folders first
+- "Date modified" column got right-side padding
+- Delete moves items to the Trash (with metadata), empty-trash action in the sidebar context menu
+- Protected (write-only) folders now trigger the admin toast; failed create operations show the exact OS error reason and offer elevation
+- Mouse side buttons (XButton1/XButton2) navigate back/forward
+
 ## [0.4.0] - 2026-09-08
 
 ### Features
@@ -101,6 +111,6 @@
 
 ---
 
-**Current Version**: 0.4.0 (Stable Release)  
+**Current Version**: 0.4.1 (Stable Release)  
 **Release Date**: 2026-09-08  
 **Maintenance**: Active

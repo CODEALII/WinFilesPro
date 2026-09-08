@@ -69,8 +69,12 @@ void I18n::init() {
     s_de["system"]         = "System";
     s_de["free_of"]        = "GB frei von";
     s_de["gb"]             = "GB";
-    s_de["delete_confirm"] = "Elemente löschen";
-    s_de["delete_msg"]     = "Möchtest du %1 Element(e) wirklich unwiderruflich löschen?";
+    s_de["delete_confirm"] = "In den Papierkorb verschieben";
+    s_de["delete_msg"]     = "Möchtest du %1 Element(e) in den Papierkorb verschieben?";
+    s_de["empty_trash"]       = "Papierkorb leeren";
+    s_de["empty_trash_title"] = "Papierkorb leeren";
+    s_de["empty_trash_msg"]   = "Alle Elemente im Papierkorb endgültig löschen?";
+    s_de["empty_trash_confirm"] = "Leeren";
     s_de["ok"]             = "OK";
     s_de["cancel"]         = "Abbrechen";
     s_de["error"]          = "Fehler";
@@ -84,6 +88,8 @@ void I18n::init() {
     s_de["file_label"]     = "Dateiname:";
     s_de["file_exists"]    = "Eine Datei mit diesem Namen existiert bereits.";
     s_de["file_fail"]      = "Datei konnte nicht erstellt werden.";
+    s_de["error_reason"]     = "\nGrund: %1";
+    s_de["trash_unavailable"] = "Der Papierkorb ist auf diesem System nicht verfügbar.";
     s_de["home"]           = "Start";
 
     // Toolbar
@@ -141,7 +147,7 @@ void I18n::init() {
     s_de["settings_lang_de"]  = "Deutsch";
     s_de["settings_lang_en"]  = "English";
     s_de["settings_about"]    = "Über WinFilesPro";
-    s_de["settings_version"]  = "Version 0.4.0 · Qt6 · Open Source";
+    s_de["settings_version"]  = "Version 0.4.1 · Qt6 · Open Source";
     s_de["settings_restart"]  = "Neustart erforderlich für Sprachänderung";
     s_de["settings_save"]     = "Speichern";
     s_de["settings_hidden"]   = "Versteckte Dateien anzeigen";
@@ -214,8 +220,12 @@ void I18n::init() {
     s_en["system"]         = "System";
     s_en["free_of"]        = "GB free of";
     s_en["gb"]             = "GB";
-    s_en["delete_confirm"] = "Delete Items";
-    s_en["delete_msg"]     = "Are you sure you want to permanently delete %1 item(s)?";
+    s_en["delete_confirm"] = "Move to Trash";
+    s_en["delete_msg"]     = "Move %1 item(s) to the Trash?";
+    s_en["empty_trash"]       = "Empty Trash";
+    s_en["empty_trash_title"] = "Empty Trash";
+    s_en["empty_trash_msg"]   = "Permanently delete all items in the Trash?";
+    s_en["empty_trash_confirm"] = "Empty";
     s_en["ok"]             = "OK";
     s_en["cancel"]         = "Cancel";
     s_en["error"]          = "Error";
@@ -229,6 +239,8 @@ void I18n::init() {
     s_en["file_label"]     = "File name:";
     s_en["file_exists"]    = "A file with this name already exists.";
     s_en["file_fail"]     = "Could not create file.";
+    s_en["error_reason"]     = "\nReason: %1";
+    s_en["trash_unavailable"] = "Trash is not available on this system.";
     s_en["home"]          = "Home";
 
     // Toolbar
@@ -286,7 +298,7 @@ void I18n::init() {
     s_en["settings_lang_de"]  = "Deutsch";
     s_en["settings_lang_en"]  = "English";
     s_en["settings_about"]    = "About WinFilesPro";
-    s_en["settings_version"]  = "Version 0.4.0 · Qt6 · Open Source";
+    s_en["settings_version"]  = "Version 0.4.1 · Qt6 · Open Source";
     s_en["settings_restart"]  = "Restart required for language change";
     s_en["settings_save"]     = "Save";
     s_en["settings_hidden"]   = "Show hidden files";

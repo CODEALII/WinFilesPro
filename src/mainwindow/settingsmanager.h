@@ -5,6 +5,7 @@
 #include <QPoint>
 #include "i18n.h"
 #include "style.h"
+#include <QtGlobal>
 
 class SettingsManager {
 public:
@@ -37,6 +38,12 @@ public:
     // Angepinnte Ordner im Schnellzugriff
     static QStringList getPinnedPaths();
     static void setPinnedPaths(const QStringList &paths);
+
+    // Sortierung der Dateiliste
+    static int getSortColumn();
+    static void setSortColumn(int column);
+    static Qt::SortOrder getSortOrder();
+    static void setSortOrder(Qt::SortOrder order);
 
 private:
     static Language s_language;

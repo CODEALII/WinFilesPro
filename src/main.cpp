@@ -27,11 +27,15 @@ int main(int argc, char *argv[]) {
     I18n::setLanguage(SettingsManager::getLanguage());
     AppStyle::setTheme(SettingsManager::getTheme());
 
-    // Startpfad: optionales Argument (z.B. nach erneutem Start als root)
+    // Startpfad: optionales Argument (z.B. nach erneutem Start als root),
+    // sonst der zuletzt besuchte Ordner
     QString startPath;
     const QStringList args = QCoreApplication::arguments();
     if (args.size() > 1 && QDir(args.at(1)).exists()) {
         startPath = args.at(1);
+    } else {
+        const QString last = SettingsManager::getLastPath();
+        if (QDir(last).exists()) startPath = last;
     }
 
     MainWindow window;

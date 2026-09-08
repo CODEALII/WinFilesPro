@@ -126,3 +126,26 @@ void SettingsManager::setPinnedPaths(const QStringList &paths) {
     settings.setValue("pinnedPaths", paths);
     settings.sync();
 }
+
+int SettingsManager::getSortColumn() {
+    QSettings settings("WinFilesPro", "WinFilesPro");
+    return settings.value("sort/column", 0).toInt();
+}
+
+void SettingsManager::setSortColumn(int column) {
+    QSettings settings("WinFilesPro", "WinFilesPro");
+    settings.setValue("sort/column", column);
+    settings.sync();
+}
+
+Qt::SortOrder SettingsManager::getSortOrder() {
+    QSettings settings("WinFilesPro", "WinFilesPro");
+    const int v = settings.value("sort/order", 0).toInt();
+    return (v == 0) ? Qt::AscendingOrder : Qt::DescendingOrder;
+}
+
+void SettingsManager::setSortOrder(Qt::SortOrder order) {
+    QSettings settings("WinFilesPro", "WinFilesPro");
+    settings.setValue("sort/order", order == Qt::DescendingOrder ? 1 : 0);
+    settings.sync();
+}

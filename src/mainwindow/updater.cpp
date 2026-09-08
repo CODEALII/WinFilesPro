@@ -22,7 +22,7 @@ QString Updater::currentVersion() {
 #ifdef WINFILESPRO_VERSION
     return QStringLiteral(WINFILESPRO_VERSION);
 #else
-    return QStringLiteral("0.4.0");
+    return QStringLiteral("0.4.1");
 #endif
 }
 

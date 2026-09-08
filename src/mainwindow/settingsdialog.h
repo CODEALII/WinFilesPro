@@ -18,7 +18,6 @@ class SettingsDialog : public QDialog {
 public:
     // Callbacks damit MainWindow direkt reagieren kann ohne Neustart
     std::function<void(Language)>  onLanguageChanged;
-    std::function<void(AppTheme)>  onThemeChanged;
 
     explicit SettingsDialog(QWidget *parent = nullptr, Updater *updater = nullptr);
 
@@ -29,7 +28,6 @@ private:
     void buildUi();
     QWidget *makeSectionHeader(const QString &text);
     QWidget *makeLangSelector();
-    QWidget *makeThemeSelector();
     QWidget *makeAboutSection();
     QWidget *makeUpdateSection();
     void updateUpdateUi();
@@ -37,8 +35,6 @@ private:
     // Pill-style toggle button pair
     QPushButton *langDe = nullptr;
     QPushButton *langEn = nullptr;
-    QPushButton *themeDark = nullptr;
-    QPushButton *themeLight = nullptr;
 
     // Update-Sektion
     Updater *m_updater = nullptr;
@@ -49,5 +45,4 @@ private:
     QProgressBar *updateProgress = nullptr;
 
     Language  selectedLang;
-    AppTheme  selectedTheme;
 };

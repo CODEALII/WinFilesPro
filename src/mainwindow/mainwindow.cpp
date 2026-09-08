@@ -1334,11 +1334,6 @@ void MainWindow::openSettings() {
     Updater updater;
     SettingsDialog dlg(this, &updater);
 
-    dlg.onThemeChanged = [this](AppTheme theme) {
-        AppStyle::setTheme(theme);
-        applyTheme();
-    };
-
     dlg.onLanguageChanged = [this](Language lang) {
         I18n::setLanguage(lang);
         // Toolbar-Texte aktualisieren
